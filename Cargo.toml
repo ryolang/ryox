@@ -1,0 +1,20 @@
+[package]
+name = "ryo"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+# lalrpop = "0.22"
+
+[dependencies]
+# ariadne fancy errors for compiler
+# lalrpop = "0.22"
+# lalrpop-util = "0.22"
+# lazy_static = "1.5.0"
+chumsky = "0.9"
+logos = "0.15"
+# melior = "0.19.0"
+# pest = "2.7.14"
+# pest_derive = "2.7.14"
+
+# async to sync https://github.com/zesterer/pollster

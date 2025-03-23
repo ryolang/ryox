@@ -1,0 +1,28 @@
+
+# https://github.com/modularml/mojo/blob/main/docs/manual/values/ownership.ipynb
+## Only a reference to the memory is passed in functions
+
+fn read_text(borrowed text: String): # default behaviour, fast
+    text += "!"  # This will fail because the function do not owns text, throws an error
+    var my_copy = text # slow, because you have to copy the full string if you want modify it, throws a warning
+    my_copy += ", read"
+    print(text)
+
+fn mutate_text(inout text: String): # fast, but can be mutated by others (less secure)
+    text += ", mutated"
+    print(text)
+
+fn take_text(owned text: String): # fast and secure, but if you want to use this value later you have to return it
+    text += ", owned"
+    print(text)
+    # text is destroyed here
+
+fn my_function():
+    var message: String = "Hello" # In Mojo variables `var` are mutable by default, in rust in-mutable use `let` and `let mut` for mutable
+    read_text(message) ## readonly, reference is pass but the owner is my_function
+    mutate_text(message) ## mutable, reference is pass but the owner is my_function
+    take_text(message) ## reference is moved to take_text
+    print(message) ## This will fail because now, take_text owned the string, throws an error
+
+my_function()
+

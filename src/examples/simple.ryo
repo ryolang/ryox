@@ -1,0 +1,15 @@
+
+
+# this is a comment
+
+
+fn sum(x:int, y:int) -> int:
+    return x + y
+
+
+fn main():
+    let x = 1  # type inference int, x is not mutable
+    let y = 2
+
+    let z = sum(x,y)
+    print(f"z: {z}")
