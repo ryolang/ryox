@@ -1,0 +1,33 @@
+# recursive
+
+## https://mojodojo.dev/guides/std/Benchmark.html
+
+fn fibonacci(n: int) -> int:
+    if n <= 1:
+        return n
+    else:
+        return fibonacci(n-1) + fibonacci(n-2)
+
+fn fibonacci_meme(n: int) -> int:
+    memo = {}
+
+    fn helper(x: int) -> int:
+        if x in memo:
+            return memo[x]
+        if x <= 1:
+            result = x
+        else:
+            result = helper(x-1) + helper(x-2)
+        memo[x] = result
+        return result
+
+    return helper(n)
+
+
+
+fn main():
+    n = 10
+    print(f"Fibonacci number at position {n} is {fibonacci_memo(n)}")
+
+    print(f"Fibonacci number at position {n} is {fibonacci(n)}")
+
