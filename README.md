@@ -1,100 +1,141 @@
 ![Ryo](./docs/assets/ryo.svg)
+# Ryo Programming Language ⚡
 
-A statically typed programming language with a focus on simplicity and ease of use.
+[![Build Status](https://img.shields.io/github/actions/workflow/status/ryolang/ryo/ci.yml?branch=main)](https://github.com/ryolang/ryo/actions)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Discord](https://img.shields.io/discord/your-discord-invite-code?label=discord&logo=discord)](https://discord.gg/your-discord-invite-code)
 
-[⚡ Ryo](https://ryolang.org)
+**Ryo /ˈraɪoʊ/: Productive, Safe, Fast.**
 
-## Features
+Ryo is a new, statically-typed, compiled programming language designed for developers who love the **simplicity of Python** but need the **performance and memory safety** guarantees of languages like Rust or Go, without the steep learning curve.
 
-Primary goal: Efficient and safe Python
+Build reliable and efficient **web backends, CLI tools, and scripts** with an approachable syntax, powerful compile-time checks, and a straightforward concurrency model using Go-inspired channels. Ryo manages memory safely via ownership and borrowing (simplified, no manual lifetimes) **without a garbage collector**, ensuring predictable performance and eliminating entire classes of bugs.
 
-review https://docs.modular.com/mojo/manual/values/ownership copy design
+**This project contains the source code for the Ryo compiler, standard library, and tooling.**
 
-- Expressive, Minimal Syntax for readability similar to Python
-- Static Type System with strong compile-time checks
-- Type Inference to minimize explicit annotations
-- Memory Safety through compile-time guarantees
-- Immutable-by-Default variables for safer code
-- Efficient Compilation targeting native performance
-- Simple async calls avoiding coloring
-- Interactive REPL for rapid prototyping
-- Python interoperability
+**Status:** Ryo is currently in the **early stages of development** (pre-alpha). The language design is stabilizing, but the compiler is under active construction. It is **not yet ready for production use**. We welcome contributors!
 
-## Target audiences
+## Why Ryo?
 
-- Backend Services and Microservices Developers
-- Finance/Fintech Application Developers
-- Scientific and Technical Computing
-- Data Scientists
-- Web Developers
-- General Purpose Scripting/Automation (Critical Infrastructure)
+*   **🐍 Simple & Productive:** Write clear, readable code with a clean syntax inspired by Python (tabs, f-strings, tuples, built-in `print`). Reduce boilerplate and focus on your logic.
+*   **🛡️ Safe & Reliable:** Compile-time memory safety via "Ownership Lite" prevents dangling pointers, data races, and use-after-free errors without a GC. Explicit error handling with `Result` and `?` makes code robust. No `null` thanks to `Optional`.
+*   **🚀 Fast & Efficient:** Compiled to native code using **Cranelift** for excellent performance. No garbage collection pauses mean predictable speed. Efficient Go-inspired CSP concurrency (`spawn`/`chan`/`select`) for scalable applications.
+*   **🧩 Modern Tooling:** Integrated package manager (`ryo`), fast compiler, interactive REPL (JIT), built-in testing framework.
+*   **✨ Compile-Time Power (`comptime`):** Run code at compile time for metaprogramming, configuration loading, and pre-computation without runtime cost or complex macros.
+*   **🧩 Pragmatic Interoperability:** Designed with C FFI for leveraging existing native code. (Future goals include exploring closer integration with ecosystems like Python).
 
-## Quick Start
+## Features Overview
 
-Read the [Quick Start Guide](https://ryolang.org) from the documentation.
+*   **Memory Management:** Ownership & Borrowing (Simplified, "Ownership Lite"), No GC, RAII (`Drop`), Immutable-by-Default variables for safer code.
+*   **Concurrency:** Go-inspired CSP (Communicating Sequential Processes) via `spawn`, `chan`, `select`
+*   **Syntax:** Python-inspired, tab-indented, expressions, statements
+*   **Types:** Static typing, type inference (for `var = val`), primitives (`int`, `float`, `bool`, `str`, `char`), tuples, `struct`, `enum` (ADTs), `trait` (static dispatch initially)
+*   **Error Handling:** `Result[T, E]` and `Optional[T]` enums, `?` operator, `panic` (aborts)
+*   **Compile-Time Execution:** `comptime` blocks and functions
+*   **Tooling:** `ryo` command (compiler, runner, REPL, package manager frontend), `ryopkg` logic integrated, Cranelift backend (AOT/JIT/Wasm)
+*   **FFI:** C interoperability via `extern "C"` and `unsafe` blocks, `ffi` stdlib module. (Future Goal: Explore deeper integration with other language ecosystems like Python).
+*   **Standard Library:** Modular packages (`io`, `str`, `collections`, `http`, `json`, `os`, etc.)
 
-## Building from Source
+For full details, see the [Language Specification](docs/specification.md) (Link to spec file).
 
-Ensure you have [Rust](https://rust-lang.org) installed.
+## Quick Example
 
-```shell
-cargo build
+```ryo
+# src/main.ryo
+import net.http
+import encoding.json
+
+struct User:
+    id: int
+    name: str
+
+# Assume JSON encoding logic exists (e.g., via a trait)
+# impl json.ToJson for User { ... }
+
+#: Simple handler to return users as JSON
+fn handle_users(req: http.Request) -> http.Response {
+    # In a real app, fetch from DB
+    let users = [
+        User{ id: 1, name: "Alice" },
+        User{ id: 2, name: "Bob" },
+    ]
+    # Respond with JSON, using ? to propagate potential encoding errors
+    return http.Response.json(users)?
+}
+
+#: Main application entry point
+fn main() -> Result[(), http.Error] {
+    server = http.Server.new()
+
+    # Define routes - handlers likely run via spawn internally
+    server.handle("/users", handle_users)
+    server.handle("/", fn(req) { http.Response.text("Hello from Ryo!") })
+
+    addr = "127.0.0.1:8080"
+    print(f"Server listening on {addr}")
+    server.listen(addr)? # Start the server
+
+    return Ok(())
+}
+
 ```
 
-## TODO
+Run with: `ryo run` (after building the `ryo` tool)
 
-- Move index to getting started
-- Review Memory
-- Review Concurrency
-### Core language
-- Lexer: Lexical, Syntactic Grammar
-  1. Arithmetic
-  2. Basic types
-  3. Operators
-  4. Comments
-  5. print
-  6. Control Flow: if, for
-  7. Functions
-  8. Variables
-  9. Imports
-  10. Enums
-      1. match
-  11. Errors
-      1. try..or
-      2. check ? for error propagation
-  12. Structs
-  13. Traits
-- Parser
-- AST
-- Interpreter (AST visitor)
-- REPL
-- Basic Compiler
-- Basic Mem Management
-- Testing - go to: lexer next number
-### Safety & Concurrency
-- Borrow & Ownership
-- async, await, fibers
-- STD
-- Testing
-  
+## Getting Started & Installation
 
-## Resources
+Ryo is under heavy development. Currently, installation requires building from source.
 
-- https://www.python-httpx.org/
-- https://mlir.llvm.org/docs/Dialects/
-- https://edgl.dev/blog/mlir-with-rust/
-- https://github.com/edg-l/edlang
-- https://github.com/ehsanmok/create-your-own-lang-with-rust/tree/master
-- https://createlang.rs
-- https://pest.rs/book/
-- https://doc.rust-lang.org/rust-by-example
-- https://buzz-lang.dev/guide/
-- https://github.com/rust-lang/rustlings/
-- https://github.com/zesterer/tao
-- https://course.ccs.neu.edu/cs4410sp19/lec_type-inference_notes.html
-- https://rustc-dev-guide.rust-lang.org/type-inference.html
-- https://github.com/rhaiscript/rhai
+**(Instructions for building from source will go here)**
 
-```shell
-cargo run "1+1"
+```bash
+# Example build steps (replace with actual steps)
+git clone https://github.com/ryolang/ryo.git
+cd ryo
+cargo build --release
+# Add target/release to your PATH
+export PATH="$(pwd)/target/release:$PATH"
+
+# Verify
+ryo --version
 ```
+
+Once installed, you can create and run projects:
+
+```bash
+# Create a new project
+ryo new my_app
+cd my_app
+
+# Edit src/main.ryo
+# ...
+
+# Build and run
+ryo run
+```
+
+## Contributing
+
+We welcome contributions! Ryo is an ambitious project, and we need help with:
+
+*   Compiler development (parsing, semantic analysis, borrow checking, code generation)
+*   Standard library implementation
+*   Tooling (`ryo` package manager, REPL, testing framework)
+*   Documentation writing
+*   Language design discussions
+*   Writing examples and tutorials
+
+Please read our [Contributing Guide](CONTRIBUTING.md) and check out the [open issues](https://github.com/ryolang/ryo/issues). Join our [Discord Server](https://discord.gg/your-discord-invite-code) to chat with the developers!
+
+## Documentation
+
+*   [Language Specification](docs/specification.md)
+*   *(Link to Tutorial)*
+*   *(Link to Standard Library Docs)*
+*   *(Link to Guides - Memory, Concurrency, etc.)*
+
+*(More documentation will be added as the project progresses)*
+
+## License
+
+Ryo is distributed under the terms of both the MIT license. See [LICENSE](LICENSE) for details.

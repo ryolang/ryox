@@ -1,8 +1,8 @@
-# Ryo package manager
+# Ryo Package Manager
 
-Let's design a package manager for Ryo, taking inspiration from both Cargo and Go Modules, but tailored to Ryo's philosophy of being Python-like yet safe and performant.  We'll lean more towards the Cargo style for its robustness, but aim for some Go Modules-inspired simplicity where possible.
+Let's design a package manager for Ryo, taking inspiration from both Cargo and Go Modules, but tailored to Ryo's philosophy of being Python-like yet safe and performant. We'll lean more towards the Cargo style for its robustness, but aim for some Go Modules-inspired simplicity where possible.
 
-**Name:** Let's call it **`ryopkg`** (Ryo Package Manager). This is concise and clearly indicates its purpose.
+**Name:** Ryo Package Manager is integrated into **`ryo`** binary.
 
 **Manifest File:** We'll use a TOML-based manifest file, like Cargo's `Cargo.toml`, for its structured and readable format. Let's name it **`ryo.toml`**.
 
@@ -12,11 +12,11 @@ Let's design a package manager for Ryo, taking inspiration from both Cargo and G
 
 **Dependency Resolution:** We'll implement a **robust dependency resolution algorithm**, drawing inspiration from Cargo's resolver.  It should handle version conflicts and select compatible versions, aiming for a "newest compatible" strategy by default, similar to Cargo.
 
-**CLI Tool: `ryopkg` command-line interface**
+**CLI Tool: `ryo` command-line interface**
 
-The `ryopkg` tool will be the primary way users interact with the package manager.  Here are the essential subcommands:
+The `ryo` tool will be the primary way users interact with the package manager.  Here are the essential subcommands:
 
-1.  **`ryopkg new <project_name>`:**  Create a new Ryo project.
+1.  **`ryo new <project_name>`:**  Create a new Ryo project.
 
     *   **Action:** Creates a new directory named `<project_name>`.
     *   **Content:**
@@ -24,7 +24,7 @@ The `ryopkg` tool will be the primary way users interact with the package manage
             *   `ryo.toml`:  A basic manifest file pre-filled with project name and essential sections.
             *   `src/`:  Source code directory.
                 *   `src/main.ryo`:  A basic "Hello, World!" program in Ryo.
-    *   **Example:** `ryopkg new hello_ryo`
+    *   **Example:** `ryo new hello_ryo`
 
     ```toml
     # ryo.toml (inside hello_ryo directory)
@@ -38,7 +38,17 @@ The `ryopkg` tool will be the primary way users interact with the package manage
     # Dependencies will be listed here
     ```
 
-2.  **`ryopkg add <package_name> [<version_constraint>]`:** Add a dependency to the current project.
+    **`ryo new --lib <project_name>`:**  Create a new Ryo library.
+
+    *   **Action:** Creates a new directory named `<project_name>`.
+    *   **Content:**
+        *   Inside `<project_name>`:
+            *   `ryo.toml`:  A basic manifest file pre-filled with project name and essential sections.
+            *   `src/`:  Source code directory.
+                *   `src/lib.ryo`:  A basic "Hello, World!" program in Ryo.
+    *   **Example:** `ryo new --lib lib_ryo`
+
+2.  **`ryo add <package_name> [<version_constraint>]`:** Add a dependency to the current project.
 
     *   **Action:** Modifies the `ryo.toml` file in the current directory to add a dependency.
     *   **Arguments:**
@@ -48,11 +58,11 @@ The `ryopkg` tool will be the primary way users interact with the package manage
         *   Adds the dependency to the `[dependencies]` section in `ryo.toml`.
         *   If no version constraint is provided, it will fetch the latest version from `ryopkgs.io`.
     *   **Example:**
-        *   `ryopkg add ryo-utils`  (adds latest version)
-        *   `ryopkg add fast-http ^0.3` (adds version compatible with 0.3.x)
+        *   `ryo add ryo-utils`  (adds latest version)
+        *   `ryo add fast-http ^0.3` (adds version compatible with 0.3.x)
 
     ```toml
-    # ryo.toml (after `ryopkg add ryo-utils`)
+    # ryo.toml (after `ryo add ryo-utils`)
     [package]
     name = "hello_ryo"
     version = "0.1.0"
@@ -63,17 +73,17 @@ The `ryopkg` tool will be the primary way users interact with the package manage
     ryo-utils = "1.0" # Latest version resolved and added
     ```
 
-3.  **`ryopkg install`:** Install project dependencies.
+3.  **`ryo install`:** Install project dependencies.
 
     *   **Action:** Resolves dependencies listed in `ryo.toml`, downloads them from `ryopkgs.io`, and prepares them for building.
     *   **Behavior:**
         *   Reads `ryo.toml` to get dependencies.
         *   Resolves dependency versions based on constraints and the registry.
-        *   Downloads required packages and their dependencies to a local cache (`~/.ryopkg-cache` or similar).
+        *   Downloads required packages and their dependencies to a local cache (`~/.ryo-cache` or similar).
         *   Creates or updates a `ryo.lock` file in the project directory.  This `ryo.lock` file records the exact versions of all direct and transitive dependencies that were resolved in this install.
     *   **`ryo.lock` File:**  The `ryo.lock` file is crucial for **repeatable builds**.  It ensures that everyone working on the project, and in deployment environments, uses the *exact same versions* of dependencies, preventing "works on my machine" issues due to dependency version mismatches.
 
-4.  **`ryopkg build`:** Build the current project and its dependencies.
+4.  **`ryo build`:** Build the current project and its dependencies.
 
     *   **Action:** Compiles the Ryo project and all its dependencies.
     *   **Behavior:**
@@ -83,23 +93,23 @@ The `ryopkg` tool will be the primary way users interact with the package manage
         *   Produces an executable (or library, depending on project type - initially focus on executables).
         *   Output executable is placed in a standard location (e.g., `target/debug/` for debug builds, `target/release/` for release builds - like Cargo).
 
-5.  **`ryopkg run`:** Run the main executable of the current project.
+5.  **`ryo run`:** Run the main executable of the current project.
 
     *   **Action:**  Builds the project (if necessary) and then executes the resulting executable.
     *   **Behavior:**
-        *   If the project hasn't been built yet, it will implicitly call `ryopkg build` first.
+        *   If the project hasn't been built yet, it will implicitly call `ryo build` first.
         *   Executes the compiled executable, typically located in the debug build output directory (`target/debug/`).
-        *   For running release builds, users should use `ryopkg build --release` and then execute the binary in `target/release/`.
+        *   For running release builds, users should use `ryo build --release` and then execute the binary in `target/release/`.
 
-6.  **`ryopkg test`:** Run tests for the current project.
+6.  **`ryo test`:** Run tests for the current project.
 
     *   **Action:**  Discovers and runs tests within the project.
     *   **Behavior:**
-        *   Compiles the project and its dependencies (similar to `ryopkg build`).
+        *   Compiles the project and its dependencies (similar to `ryo build`).
         *   Locates test functions (using a convention, e.g., functions annotated with `#[test]` attribute, similar to Rust or Python's `unittest`).
         *   Executes the tests and reports results (pass/fail).
 
-7.  **`ryopkg publish`:** Publish a package to `ryopkgs.io`.
+7.  **`ryo publish`:** Publish a package to `ryopkgs.io`.
 
     *   **Action:**  Packages and publishes the current project as a Ryo package to the central registry.
     *   **Behavior:**
@@ -109,7 +119,7 @@ The `ryopkg` tool will be the primary way users interact with the package manage
         *   Requires user authentication/authorization on `ryopkgs.io` to prevent unauthorized publishing.
     *   **Process:**  Similar to `cargo publish` or `npm publish`.
 
-8.  **`ryopkg update`:** Update dependencies.
+8.  **`ryo update`:** Update dependencies.
 
     *   **Action:** Updates dependencies of the current project to their latest compatible versions, respecting version constraints in `ryo.toml`.
     *   **Behavior:**
@@ -117,16 +127,16 @@ The `ryopkg` tool will be the primary way users interact with the package manage
         *   Downloads newer versions (within constraints) if available.
         *   Updates `ryo.lock` to reflect the new resolved versions.
 
-9.  **`ryopkg lock`:** Generate or refresh the `ryo.lock` file without updating dependencies.
+9.  **`ryo lock`:** Generate or refresh the `ryo.lock` file without updating dependencies.
 
-    *   **Action:**  Ensures the `ryo.lock` file is up-to-date with the currently resolved dependency versions, without actively seeking newer versions (unlike `ryopkg update`).
+    *   **Action:**  Ensures the `ryo.lock` file is up-to-date with the currently resolved dependency versions, without actively seeking newer versions (unlike `ryo update`).
     *   **Use Case:**  Useful for ensuring repeatable builds without changing dependency versions.  Often used in CI/CD pipelines or when you want to strictly control dependency versions.
 
 **CLI Tool Implementation Notes:**
 
-*   **Rust for `ryopkg` Implementation (Recommended):**  Implementing `ryopkg` in Rust itself is a very good idea. Rust's performance, reliability, and existing crates for CLI tools, TOML parsing, networking, etc., would make it a highly suitable choice.
-*   **Clear Error Messages:**  `ryopkg` should provide user-friendly and informative error messages for common issues (e.g., dependency resolution failures, network errors, invalid `ryo.toml`, publishing errors).
-*   **Help and Documentation:**  Implement `ryopkg help` and help messages for each subcommand to guide users.  Also, provide comprehensive online documentation for `ryopkg`.
+*   **Rust for `ryo` Implementation (Recommended):**  Implementing `ryo` in Rust itself is a very good idea. Rust's performance, reliability, and existing crates for CLI tools, TOML parsing, networking, etc., would make it a highly suitable choice.
+*   **Clear Error Messages:**  `ryo` should provide user-friendly and informative error messages for common issues (e.g., dependency resolution failures, network errors, invalid `ryo.toml`, publishing errors).
+*   **Help and Documentation:**  Implement `ryo help` and help messages for each subcommand to guide users.  Also, provide comprehensive online documentation for `ryo`.
 
 **Registry (`ryopkgs.io`) Design Considerations:**
 
@@ -138,11 +148,11 @@ The `ryopkg` tool will be the primary way users interact with the package manage
 
 **Simplified vs. Feature-Rich:**
 
-For the initial version of `ryopkg`, it's wise to start with a **simplified but functional core** set of features: `new`, `add`, `install`, `build`, `run`, `test`, `publish`. Focus on making these core commands robust and user-friendly.  Then, iteratively add more advanced features like workspaces, more sophisticated build customization, advanced dependency resolution options, etc., based on user feedback and community needs.
+For the initial version of `ryo`, it's wise to start with a **simplified but functional core** set of features: `new`, `add`, `install`, `build`, `run`, `test`, `publish`. Focus on making these core commands robust and user-friendly.  Then, iteratively add more advanced features like workspaces, more sophisticated build customization, advanced dependency resolution options, etc., based on user feedback and community needs.
 
 **Conclusion:**
 
-This Cargo-style `ryopkg` package manager design, with a central registry, TOML manifest, and a set of clear CLI commands, provides a strong and well-structured foundation for managing Ryo packages and projects. It balances robustness with relative simplicity for users, and sets the stage for a healthy and growing Ryo ecosystem. 
+This Cargo-style `ryo` package manager design, with a central registry, TOML manifest, and a set of clear CLI commands, provides a strong and well-structured foundation for managing Ryo packages and projects. It balances robustness with relative simplicity for users, and sets the stage for a healthy and growing Ryo ecosystem. 
 
 
 
