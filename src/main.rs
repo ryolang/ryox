@@ -1,45 +1,76 @@
-mod lexer;
-mod evaluator;
-mod ast;
-mod parser;
-
 use std::env;
-use lexer::Token;
-use chumsky::prelude::*;
+use ariadne::{Color, Label, Report, ReportKind, Source};
+use chumsky::{
+    input::{Stream, ValueInput},
+    prelude::*,
+};
 use logos::Logos;
+use crate::lexer::Token;
+use crate::parser::parser;
+
+
+mod ast;
+mod lexer;
+mod parser;
+mod evaluator;
+
+const SRC: &str = r"
+    (-
+        (* (+ 4 7.3) 7)
+        (/ 5 3)
+    )
+";
+
 fn main() {
     //reads the input expression from the command line
     let input = env::args()
         .nth(1)
         .expect("Expected expression argument (e.g. `1 + 7 * (3 - 4) / 5`)");
 
-    //creates a lexer instance from the input
-    let lexer = Token::lexer(&input);
+    // Create a logos lexer over the source code
+    let token_iter = Token::lexer(&input)
+        .spanned()
+        // Convert logos errors into tokens. We want parsing to be recoverable and not fail at the lexing stage, so
+        // we have a dedicated `Token::Error` variant that represents a token error that was previously encountered
+        .map(|(tok, span)| match tok {
+            // Turn the `Range<usize>` spans logos gives us into chumsky's `SimpleSpan` via `Into`, because it's easier
+            // to work with
+            Ok(tok) => (tok, span.into()),
+            Err(()) => (Token::Error, span.into()),
+        });
 
-    //splits the input into tokens, using the lexer
-    let mut tokens = vec![];
-    for (token, span) in lexer.spanned() {
-        match token {
-            Ok(token) => tokens.push(token),
-            Err(e) => {
-                println!("lexer error at {:?}: {}", span, e);
-                return;
+    // Turn the token iterator into a stream that chumsky can use for things like backtracking
+    let token_stream = Stream::from_iter(token_iter)
+        // Tell chumsky to split the (Token, SimpleSpan) stream into its parts so that it can handle the spans for us
+        // This involves giving chumsky an 'end of input' span: we just use a zero-width span at the end of the string
+        .map((0..input.len()).into(), |(t, s): (_, _)| (t, s));
+
+    // Parse the token stream with our chumsky parser
+    match parser().parse(token_stream).into_result() {
+        // If parsing was successful, attempt to evaluate the s-expression
+        Ok(expr) => {
+            println!("[AST]\n{:#?}", expr);
+            //evaluates the AST to get the result
+            println!("\n[result]\n{}", expr.eval());
+        },
+        // If parsing was unsuccessful, generate a nice user-friendly diagnostic with ariadne. You could also use
+        // codespan, or whatever other diagnostic library you care about. You could even just display-print the errors
+        // with Rust's built-in `Display` trait, but it's a little crude
+        Err(errs) => {
+            for err in errs {
+                Report::build(ReportKind::Error, (), err.span().start)
+                    .with_code(3)
+                    .with_message(err.to_string())
+                    .with_label(
+                        Label::new(err.span().into_range())
+                            .with_message(err.reason().to_string())
+                            .with_color(Color::Red),
+                    )
+                    .finish()
+                    .eprint(Source::from(input.clone()))
+                    .unwrap();
             }
         }
     }
 
-    //parses the tokens to construct an AST
-    let ast = match parser::parser().parse(tokens) {
-        Ok(expr) => {
-            println!("[AST]\n{:#?}", expr);
-            expr
-        }
-        Err(e) => {
-            println!("parse error: {:#?}", e);
-            return;
-        }
-    };
-
-    //evaluates the AST to get the result
-    println!("\n[result]\n{}", ast.eval());
 }
