@@ -13,7 +13,9 @@ Build reliable and efficient **web backends, CLI tools, and scripts** with an ap
 
 **This project contains the source code for the Ryo compiler, standard library, and tooling.**
 
-**Status:** Ryo is currently in the **early stages of development** (pre-alpha). The language design is stabilizing, but the compiler is under active construction. It is **not yet ready for production use**. We welcome contributors!
+
+> [!WARNING] Status
+> Ryo is currently in the **early stages of development** (pre-alpha). The language design is stabilizing, but the compiler is under active construction. It is **not yet ready for production use**. We welcome contributors!
 
 ## Why Ryo?
 
@@ -55,7 +57,7 @@ struct User:
 #: Simple handler to return users as JSON
 fn handle_users(req: http.Request) -> http.Response {
     # In a real app, fetch from DB
-    let users = [
+    users = [
         User{ id: 1, name: "Alice" },
         User{ id: 2, name: "Bob" },
     ]
