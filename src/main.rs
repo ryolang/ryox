@@ -134,6 +134,10 @@ fn main() -> Result<(), String> {
                 "  Linked '{}' successfully -> '{}'.",
                 obj_filename, exe_filename
             );
+            println!(
+                "  Executable size: {} bytes",
+                fs::metadata(exe_filename).unwrap().len()
+            );
 
             // --- Execution Step ---
             println!(
