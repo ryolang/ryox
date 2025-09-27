@@ -9,7 +9,7 @@
 
 Ryo is a new, statically-typed, compiled programming language designed for developers who love the **simplicity of Python** but need the **performance and memory safety** guarantees of languages like Rust or Go, without the steep learning curve.
 
-Build reliable and efficient **web backends, CLI tools, and scripts** with an approachable syntax, powerful compile-time checks, and a straightforward concurrency model using Go-inspired channels. Ryo manages memory safely via ownership and borrowing (simplified, no manual lifetimes) **without a garbage collector**, ensuring predictable performance and eliminating entire classes of bugs.
+Build reliable and efficient **web backends, CLI tools, and scripts** with an approachable syntax, powerful compile-time checks, and a familiar async/await concurrency model. Ryo manages memory safely via ownership and borrowing (simplified, no manual lifetimes) **without a garbage collector**, ensuring predictable performance and eliminating entire classes of bugs.
 
 **This project contains the source code for the Ryo compiler, standard library, and tooling.**
 
@@ -21,7 +21,7 @@ Build reliable and efficient **web backends, CLI tools, and scripts** with an ap
 
 *   **🐍 Simple & Productive:** Write clear, readable code with a clean syntax inspired by Python (tabs, f-strings, tuples, built-in `print`). Reduce boilerplate and focus on your logic.
 *   **🛡️ Safe & Reliable:** Compile-time memory safety via "Ownership Lite" prevents dangling pointers, data races, and use-after-free errors without a GC. Explicit error handling with `Result` and `?` makes code robust. No `null` thanks to `Optional`.
-*   **🚀 Fast & Efficient:** Compiled to native code using **Cranelift** for excellent performance. No garbage collection pauses mean predictable speed. Efficient Go-inspired CSP concurrency (`spawn`/`chan`/`select`) for scalable applications.
+*   **🚀 Fast & Efficient:** Compiled to native code using **Cranelift** for excellent performance. No garbage collection pauses mean predictable speed. Familiar async/await concurrency for scalable applications with excellent Python developer ergonomics.
 *   **🧩 Modern Tooling:** Integrated package manager (`ryo`), fast compiler, interactive REPL (JIT), built-in testing framework.
 *   **✨ Compile-Time Power (`comptime`):** Run code at compile time for metaprogramming, configuration loading, and pre-computation without runtime cost or complex macros.
 *   **🧩 Pragmatic Interoperability:** Designed with C FFI for leveraging existing native code. (Future goals include exploring closer integration with ecosystems like Python).
@@ -29,7 +29,7 @@ Build reliable and efficient **web backends, CLI tools, and scripts** with an ap
 ## Features Overview
 
 *   **Memory Management:** Ownership & Borrowing (Simplified, "Ownership Lite"), No GC, RAII (`Drop`), Immutable-by-Default variables for safer code.
-*   **Concurrency:** Go-inspired CSP (Communicating Sequential Processes) via `spawn`, `chan`, `select`
+*   **Concurrency:** Python-familiar async/await with high-performance async runtime
 *   **Syntax:** Python-inspired, tab-indented, expressions, statements
 *   **Types:** Static typing, type inference (for `var = val`), primitives (`int`, `float`, `bool`, `str`, `char`), tuples, `struct`, `enum` (ADTs), `trait` (static dispatch initially)
 *   **Error Handling:** `Result[T, E]` and `Optional[T]` enums, `?` operator, `panic` (aborts)
@@ -37,6 +37,7 @@ Build reliable and efficient **web backends, CLI tools, and scripts** with an ap
 *   **Tooling:** `ryo` command (compiler, runner, REPL, package manager frontend), `ryopkg` logic integrated, Cranelift backend (AOT/JIT/Wasm)
 *   **FFI:** C interoperability via `extern "C"` and `unsafe` blocks, `ffi` stdlib module. (Future Goal: Explore deeper integration with other language ecosystems like Python).
 *   **Standard Library:** Modular packages (`io`, `str`, `collections`, `http`, `json`, `os`, etc.)
+*   **Future Concurrency Extensions:** CSP-style channels (`chan`, `select`) planned as optional additions for specialized use cases like actor systems and data pipelines
 
 For full details, see the [Language Specification](docs/specification.md) (Link to spec file).
 
@@ -44,42 +45,26 @@ For full details, see the [Language Specification](docs/specification.md) (Link 
 
 ```ryo
 # src/main.ryo
-import net.http
-import encoding.json
 
-struct User:
-    id: int
-    name: str
-
-# Assume JSON encoding logic exists (e.g., via a trait)
-# impl json.ToJson for User { ... }
-
-#: Simple handler to return users as JSON
-fn handle_users(req: http.Request) -> http.Response {
-    # In a real app, fetch from DB
-    users = [
-        User{ id: 1, name: "Alice" },
-        User{ id: 2, name: "Bob" },
-    ]
-    # Respond with JSON, using ? to propagate potential encoding errors
-    return http.Response.json(users)?
+fn greet(name: &str) -> str {
+    return f"Hello, {name}! Welcome to Ryo."
 }
 
-#: Main application entry point
-fn main() -> Result[(), http.Error] {
-    server = http.Server.new()
-
-    # Define routes - handlers likely run via spawn internally
-    server.handle("/users", handle_users)
-    server.handle("/", fn(req) { http.Response.text("Hello from Ryo!") })
-
-    addr = "127.0.0.1:8080"
-    print(f"Server listening on {addr}")
-    server.listen(addr)? # Start the server
-
-    return Ok(())
+fn main() {
+    # Type inference like Python
+    message = greet("World")
+    print(message)
+    
+    # Safe collections
+    numbers = [1, 2, 3, 4, 5]
+    print(f"Numbers: {numbers}")
+    
+    # Memory safe - no null pointer exceptions!
+    user = Optional.Some("Alice")
+    match user:
+        Optional.Some(name): print(f"User: {name}")
+        Optional.None: print("No user found")
 }
-
 ```
 
 Run with: `ryo run` (after building the `ryo` tool)

@@ -62,7 +62,7 @@ Productive, Safe, and Fast.<br>
 
 Ryo is a modern, statically-typed, compiled programming language designed for developers who love the **simplicity of Python** but need the **performance and memory safety** guarantees of languages like Rust or Go, without the steep learning curve.
 
-Build reliable and efficient **web backends, CLI tools, and scripts** with an approachable syntax, powerful compile-time checks, and a straightforward concurrency model using Go-inspired channels. Ryo manages memory safely via ownership and borrowing (simplified, no manual lifetimes) **without a garbage collector**, ensuring predictable performance and eliminating entire classes of bugs.
+Build reliable and efficient **web backends, CLI tools, and scripts** with an approachable syntax, powerful compile-time checks, and a familiar async/await concurrency model. Ryo manages memory safely via ownership and borrowing (simplified, no manual lifetimes) **without a garbage collector**, ensuring predictable performance and eliminating entire classes of bugs.
 
 !!! warning "Development Status"
 
@@ -98,7 +98,7 @@ Build reliable and efficient **web backends, CLI tools, and scripts** with an ap
   <div class="feature-item">
     <div class="icon">🚀</div>
     <h3>Fast & Efficient</h3>
-    <p>Compiled to native code (or Wasm) using Cranelift. No GC pauses mean predictable speed. Efficient Go-inspired concurrency (`spawn`/`chan`) for scalable applications.</p>
+    <p>Compiled to native code (or Wasm) using Cranelift. No GC pauses mean predictable speed. Familiar async/await concurrency for scalable applications with excellent Python developer ergonomics.</p>
   </div>
 </div>
 
@@ -110,24 +110,57 @@ Get a feel for Ryo's syntax with this simple example:
 
 ```ryo title="src/main.ryo"
 # Import necessary standard library packages
-import time
+import net.http
+import io.files
 
-#: Greets a user and prints the current time.
-fn greet(name: &str) {
-    print(f"Hello, {name}!")
+struct User:
+    id: int
+    name: str
+    email: str
 
-    # Get current time (simplified example)
-    now = time.now()
-    print(f"Current time: {now}") # Assumes SystemTime has Display impl
+#: Async function to fetch user data from API
+async fn fetch_user(user_id: int) -> Result[User, HttpError] {
+    response = await http.get(f"https://api.example.com/users/{user_id}")
+    user = await response.json[User]()
+    return Ok(user)
 }
 
-#: Main application entry point
-fn main() {
-    let user = "Ryo Developer"
-    greet(user) # Passing owned 'str' implicitly borrows as '&str'
+#: Async function to save user to file
+async fn save_user_profile(user: &User) -> Result[(), IoError] {
+    content = f"User Profile:\nID: {user.id}\nName: {user.name}\nEmail: {user.email}\n"
+    await files.write_text(f"profiles/{user.id}.txt", content)
+    return Ok(())
+}
 
-    # Use the .len() method (from the Length trait implemented by str)
-    print(f"String length: {user.len()}")
+#: Async function to fetch multiple users
+async fn fetch_multiple_users() -> Result[List[User], Error] {
+    # Concurrent API requests - very familiar to Python developers
+    user_tasks = [
+        fetch_user(1),
+        fetch_user(2), 
+        fetch_user(3)
+    ]
+    
+    users = await async.gather(user_tasks)?
+    return Ok(users)
+}
+
+#: Main application entry point  
+fn main() -> Result[(), Error] {
+    print("Fetching user profiles...")
+    
+    # Start async runtime and run async code
+    users = async_runtime.run(fetch_multiple_users())?
+    print(f"Fetched {users.len()} users successfully!")
+    
+    # Process users 
+    for user in users {
+        # Run async operations via runtime
+        async_runtime.run(save_user_profile(&user))?
+        print(f"Saved profile for {user.name}")
+    }
+    
+    return Ok(())
 }
 
 ```
@@ -137,13 +170,14 @@ fn main() {
 ## Core Features
 
 *   **Memory Safety without GC:** Simplified Ownership & Borrowing ("Ownership Lite") prevents memory errors at compile time. Deterministic cleanup via `Drop`.
-*   **CSP Concurrency:** Simple and safe concurrency using Go-inspired lightweight tasks (`spawn`) and channels (`chan`/`select`) with ownership transfer.
+*   **Async/Await Concurrency:** Simple and safe concurrency using familiar async/await patterns with a high-performance runtime. Perfect for I/O-bound applications.
 *   **Python-Inspired Syntax:** Clean, readable, tab-indented code. Includes f-strings, tuples, built-in `print`/`len`.
 *   **Static Typing:** Catch type errors at compile time. Type inference for local variables keeps code concise.
 *   **Modern Tooling:** Integrated package manager (`ryo`), fast compiler (Cranelift), REPL (JIT), built-in testing.
 *   **Compile-Time Execution (`comptime`):** Run code during compilation for metaprogramming, configuration, and optimization.
 *   **Explicit Error Handling:** `Result[T, E]` and `Optional[T]` with the `?` operator ensure robust handling of errors and absence of values.
 *   **C Interoperability:** Standard C FFI allows leveraging existing native libraries (requires `unsafe`).
+*   **Future Concurrency Extensions:** CSP-style channels (`chan[T]`, `select`) planned as optional additions for specialized use cases like actor systems and data pipelines.
 
 ---
 
