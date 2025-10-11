@@ -1,5 +1,5 @@
-use std::fmt;
 use logos::Logos;
+use std::fmt;
 
 #[derive(Logos, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Token<'a> {
@@ -9,7 +9,6 @@ pub enum Token<'a> {
     Int(&'a str),
     //#[regex(r"[+-]?([0-9]*[.])?[0-9]+")]
     //Float(&'a str),
-
     #[token("+")]
     Add,
     #[token("-")]
