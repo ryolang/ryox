@@ -79,7 +79,24 @@ Ryo synthesizes ideas from several modern programming languages:
         mut temperature: float = 98.6 # Mutable float (explicit type)
         ```
     *   *(Rationale: Immutable-by-default promotes safer code. No `let` keyword provides Pythonic simplicity. Type inference reduces boilerplate while explicit types remain available for clarity. The `mut` keyword makes mutability explicit and visible).*
-    *   **Type Inference:** Ryo uses **Hindley-Milner type inference** to automatically deduce types from usage, reducing the need for explicit type annotations while maintaining full static type safety.
+    *   **Type Inference:** Ryo uses **bidirectional type checking** (like Rust, TypeScript, and modern statically-typed languages) which provides:
+        *   **Function signatures require type annotations** - Good for documentation and API clarity
+        *   **Local variables inferred from initialization** - Ergonomic for local code
+        *   **Better, localized error messages** - More understandable than full Hindley-Milner
+        *   **Simpler implementation** - More practical than complete HM type inference
+        *   **Comptime with enhanced inference** - More aggressive type inference in compile-time contexts
+        *   Examples:
+            ```ryo
+            fn add(a: int, b: int) -> int:  # Parameters need types
+                result = a + b              # Local variable type inferred: int
+                return result               # Return type checked against signature
+
+            # Type errors are localized and clear
+            x = 5              # Inferred: int
+            y = 3.14           # Inferred: float
+            z = x + y          # Error: cannot add int and float (clear, localized)
+            ```
+        *   *(Rationale: Bidirectional type checking provides the right balance - function signatures serve as documentation and API contracts while local code remains concise. This matches developer expectations from Rust/TypeScript and provides better error messages than fully implicit systems like Hindley-Milner).*
 *   **Struct Definition:** `struct Name: field: Type ...`
 *   **Enum Definition:** `enum Name: Variant1, Variant2(Type), Variant3 { field: Type } ...`
 *   **Trait Definition:** `trait Name: fn method(...) -> RetType ... { /* optional default */ }`

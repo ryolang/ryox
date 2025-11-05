@@ -324,10 +324,10 @@ mut counter = 0              # Mutable integer (type inferred)
 mut temperature: float = 98.6 # Mutable with explicit type
 counter += 1                 # Can modify mutable variables
 
-# Type inference (Hindley-Milner)
+# Type inference (bidirectional type checking)
 x = 5                        # Inferred as int
 y = x + 10                   # Inferred as int
-result = x * 2.5             # Type error: int * float
+result = x * 2.5             # Type error: cannot multiply int and float (localized error)
 ```
 
 #### Functions
@@ -627,6 +627,40 @@ Fixes: #issue-number (if applicable)
 - Smaller ecosystem
 - Good enough for project goals
 
+### 7. Bidirectional Type Checking
+
+**Decision**: Use bidirectional type checking instead of full Hindley-Milner inference
+- Function signatures require type annotations
+- Local variables inferred from initialization
+- Comptime contexts have enhanced inference
+
+**Examples**:
+```ryo
+# Function signatures need types
+fn add(a: int, b: int) -> int:
+    result = a + b              # Local variable inferred: int
+    return result
+
+# Clear, localized errors
+x = 5
+y = 3.14
+z = x + y  # Error: cannot add int and float
+```
+
+**Rationale**:
+- **Better error messages**: Localized, understandable errors vs. cryptic HM failures
+- **Simpler to implement**: More practical than complete Hindley-Milner
+- **Familiar**: Matches Rust, TypeScript, Swift developer expectations
+- **Good documentation**: Function signatures serve as API contracts
+- **Ergonomic**: Local code stays concise with inference
+
+**Status**: Design phase, not implemented
+
+**Comparison to alternatives**:
+- **vs. Hindley-Milner**: Simpler implementation, better errors, but less "magic"
+- **vs. No inference**: Much more ergonomic, less boilerplate
+- **vs. Python**: Static type safety with similar ergonomics
+
 ---
 
 ## Common Tasks
@@ -716,8 +750,10 @@ Currently, integration tests are minimal. Need to expand test coverage.
 
 2. **Type System Foundation**
    - Add `Type` enum (Int, Float, Bool, Str, etc.)
-   - Implement type checking pass
-   - Add type inference (Hindley-Milner planned)
+   - Implement bidirectional type checking
+   - Function signatures require type annotations
+   - Local variable type inference from initialization
+   - Enhanced inference for comptime contexts
 
 3. **Semantic Analysis**
    - Symbol table / scope management
