@@ -46,11 +46,10 @@ For full details, see the [Language Specification](docs/specification.md) (Link 
 ```ryo
 # src/main.ryo
 
-fn greet(name: &str) -> str {
+fn greet(name: &str) -> str:
     return f"Hello, {name}! Welcome to Ryo."
-}
 
-fn main() {
+fn main():
     # Type inference like Python
     message = greet("World")
     print(message)
@@ -64,7 +63,6 @@ fn main() {
     match user:
         Optional.Some(name): print(f"User: {name}")
         Optional.None: print("No user found")
-}
 ```
 
 Run with: `ryo run` (after building the `ryo` tool)

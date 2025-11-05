@@ -41,7 +41,8 @@
             y: int # Regular comment for field
 
         #: Calculates the distance from the origin.
-        fn distance(p: &Point) -> float { ... }
+        fn distance(p: &Point) -> float:
+            ...
         ```
     *   *(Rationale: Uses `#` as the base. The `#:` marker provides an unambiguous distinction for documentation tooling, avoiding whitespace sensitivity and block comment syntax. Attributes `#[...]` remain separate).*
 *   **Attributes:** Metadata annotations use the `#[...]` syntax, placed before the documented item. *(Rationale: Distinct syntax using brackets clearly separates attributes from code and comments).*
@@ -69,13 +70,12 @@
 *   **Control Flow:** `if/elif/else`, `for item in iterable:`, `for i in range(start, end):`.
 *   **Pattern Matching:** `match expr: Pattern1: ... Pattern2(bind): ... Pattern3 { x, y }: ... _ : ...` (`_` for wildcard/default).
 
-*   **Async/Await:** `async fn name() -> RetType:`, `await expression`, 
+*   **Async/Await:** `async fn name() -> RetType:`, `await expression`,
     ```ryo
-    async fn fetch_data() -> Result[Data, Error] {
+    async fn fetch_data() -> Result[Data, Error]:
         response = await http.get("https://api.example.com/data")
         data = await response.json[Data]()
         return Ok(data)
-    }
     ```
 *   **Closures:** `fn(args): expression`.
 *   **Tuple Destructuring:** `(a, b) = my_tuple`.
@@ -148,11 +148,10 @@
 *   **Methods:** Methods can be defined on enums using `impl EnumName: ...`, often using `match self:` internally.
     ```ryo
     impl MyEnum:
-        fn process(self) {
+        fn process(self):
             match self:
                 MyEnum.Variant1: io.println("Processing V1")
                 # ... other variants ...
-        }
     ```
 *   *(Rationale: Enums provide type-safe ways to represent alternatives (like `Result`/`Optional`), states, and structured messages, crucial for robust software and eliminating `null` errors. Exhaustive matching is a key safety feature derived from functional programming and Rust).*
 
@@ -257,13 +256,12 @@
     *   **Ownership Integration:** Async functions work seamlessly with Ryo's ownership model - values can be moved into async contexts safely.
 *   **Examples:**
     ```ryo
-    async fn process_request(req: Request) -> Result[Response, Error> {
+    async fn process_request(req: Request) -> Result[Response, Error]:
         data = await database.query("SELECT * FROM users")?
         result = await external_api.call(data)?
         return Ok(Response.json(result))
-    }
 
-    async fn process_all_requests() {
+    async fn process_all_requests():
         tasks = [
             process_request(req1),
             process_request(req2),
@@ -271,12 +269,10 @@
         ]
         results = await async.gather(tasks)
         print(f"Processed {results.len()} requests")
-    }
 
-    fn main() {
+    fn main():
         # Start async runtime and run async code
         async_runtime.run(process_all_requests())
-    }
     ```
 *   *(Rationale: Async/await is familiar to Python developers, provides excellent ergonomics for I/O-bound applications, and integrates well with Ryo's ownership model. The cooperative nature prevents many concurrency bugs while maintaining high performance).*
 *   **Future Extensions:** CSP-style channels (`chan[T]`, `select`) planned as optional additions for specialized use cases. See [Language Proposals](proposals.md#concurrency-extensions-csp-communicating-sequential-processes) for detailed CSP design.
