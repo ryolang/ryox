@@ -81,7 +81,7 @@ process(data)      # ERROR: use of moved value
 struct MyResult: ...  # ERROR: 'Result' is keyword
 
 # But used as types everywhere
-fn parse() -> Result[int, Error]:
+fn parse() -> ParseError!int:
     ...
 ```
 
@@ -92,16 +92,16 @@ fn parse() -> Result[int, Error]:
 
 ### 4. Generic Syntax Undefined 🔴
 
-**Problem**: Generics used throughout spec (`List[T]`, `Result[T,E]`) but syntax never defined.
+**Problem**: Generics used throughout spec (`List[T]`, `Map[K,V]`) but syntax never defined.
 
 **Examples**:
 ```ryo
 # Used in spec but undefined:
-List[T], Map[K,V], Result[T,E]
+List[T], Map[K,V]
 
 # How to define?
 struct MyStruct[T]: ...?     # Unclear syntax
-fn generic_fn[T](...): ...?  # Unclear syntax  
+fn generic_fn[T](...): ...?  # Unclear syntax
 ```
 
 **Recommendation**: Define complete generic syntax:
@@ -110,14 +110,14 @@ fn generic_fn[T](...): ...?  # Unclear syntax
 struct Container[T]:
     value: T
 
-# Generic function  
+# Generic function
 fn identity[T](x: T) -> T:
     return x
 
 # Generic enum
-enum Result[T, E]:
-    Ok(T)
-    Err(E)
+error ApiResponse[T]:
+    Success(T)
+    Failure(str)
 
 # With trait bounds (future)
 fn sort[T: Comparable](list: List[T]):
@@ -131,9 +131,9 @@ fn sort[T: Comparable](list: List[T]):
 **Examples**:
 ```ryo
 impl Counter:
-    fn increment(mut self) {  # Borrow or move?
+    fn increment(mut self):  # Borrow or move?
         self.count += 1
-    }
+
     fn drop(mut self): ...   # Drop must take ownership
 
 # Usage unclear:
@@ -143,12 +143,12 @@ counter.increment()  # Does counter still exist?
 **Recommendation**: Use Rust-like explicit syntax:
 ```ryo
 impl Counter:
-    fn increment(&mut self) {     # Mutable borrow - clear
+    fn increment(&mut self):     # Mutable borrow - clear
         self.count += 1
-    }
-    fn consume(self) {            # Take ownership - clear  
+
+    fn consume(self):            # Take ownership - clear
         # ...
-    }
+
     fn drop(self): ...           # Drop takes ownership
 ```
 
@@ -160,6 +160,7 @@ impl Counter:
 - Replaced `?` operator with `try` keyword for explicit error propagation
 - Implemented `From` trait for automatic error conversion with `try` operator
 - Error types are now defined with the `error` keyword with full ADT support
+- **Direct unwrap is forbidden** — All error values must be handled with `try`/`catch` or propagated with `try`
 
 **Examples**:
 ```ryo
@@ -175,12 +176,13 @@ impl From[IoError] for AppError:
     fn from(err: IoError) -> AppError:
         return AppError.Io(err)
 
-fn fetch_and_save() -> AppError!() {
+fn fetch_and_save() -> AppError!():
     data = try await http.get("...")      # HttpError -> AppError
-    try await files.write(data)          # IoError -> AppError
+    try await files.write(data)           # IoError -> AppError
     return
-}
 ```
+
+**Key Safety Feature**: Direct access to error union values without `try`/`catch` is a compile-time error, ensuring all errors are explicitly handled.
 
 ## Moderate Issues
 
@@ -194,11 +196,11 @@ fn fetch_and_save() -> AppError!() {
 fn main():
     async_runtime.run(async_main())
 
-async fn async_main() -> Result[(), Error]:
+async fn async_main() -> AppError!():
     ...
 
 # Option B: Compiler magic
-async fn main() -> Result[(), Error]:  # Compiler starts runtime
+async fn main() -> AppError!():  # Compiler starts runtime
     # ...
 ```
 

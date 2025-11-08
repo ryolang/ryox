@@ -65,9 +65,9 @@ fn main():
     scores["David"] = 89
     alice_score = scores.get("Alice")
     match alice_score:
-        Some(score):
+        ?score:
             print(f"Alice's score: {score}")
-        None:
+        none:
             print("Alice not found")
 
     # Working with custom structs

@@ -401,6 +401,32 @@ fn main():
         print("User not found")
 ```
 
+### Important: No Direct Unwrap
+
+**You cannot directly access error or optional values without using `try`, `catch`, or `orelse`.** The compiler will reject code that tries to do this:
+
+```ryo
+# ❌ COMPILE ERROR: Cannot use error value directly
+divide(10.0, 0.0)  # This returns MathError!float, but we can't just use it
+value = result     # ERROR!
+
+# ❌ COMPILE ERROR: Cannot access fields on optional
+user = find_user(users, 1)
+name = user.name   # ERROR: user is ?User, can't access .name directly
+
+# ✅ CORRECT: Handle the error or optional value
+result = divide(10.0, 2.0) catch |e|:
+    handle_error(e)
+    return
+# Now result is definitely a float
+
+user = find_user(users, 1)
+name = user?.name orelse "Unknown"
+# Now name is definitely a string
+```
+
+This design ensures all error and optional cases are handled explicitly, preventing silent failures.
+
 ## 5. Command-Line Tools
 
 Here are the basic commands for using Ryo:

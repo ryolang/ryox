@@ -530,6 +530,41 @@ fn critical_operation():
 5. **Use `!?T` carefully** to distinguish between errors and legitimate absence
 6. **Pattern match exhaustively** to handle all error variants
 
+### 7.9 Forbidden: Direct Unwrap
+
+**Direct unwrap is NOT allowed.** Attempting to access error or optional values without using `try`, `catch`, or `orelse` is a **compile-time error**:
+
+```ryo
+# ❌ COMPILE ERROR: Cannot access error union value directly
+result: ParseError!int = parse_int("42")
+value = result  # ERROR: Cannot use value of type ParseError!int directly
+
+# ❌ COMPILE ERROR: Cannot access optional value directly
+maybe_user: ?User = get_user(id)
+name = maybe_user.name  # ERROR: Cannot access fields on optional type
+
+# ✅ CORRECT: Use try to unwrap errors
+result: ParseError!int = parse_int("42")
+value = try result catch |e|:
+    handle_error(e)
+    return
+
+# ✅ CORRECT: Use try to unwrap and propagate
+fn load_data() -> ParseError!int:
+    result = try parse_int("42")  # Propagates error on failure
+    return result
+
+# ✅ CORRECT: Use orelse for optionals
+maybe_user: ?User = get_user(id)
+name = maybe_user?.name orelse "Unknown"
+
+# ✅ CORRECT: Use smart casting after null check
+if maybe_user != none:
+    name = maybe_user.name  # Type narrowed to User
+```
+
+*   **Rationale:** Direct unwrap removes type safety. By requiring explicit `try`/`catch`/`orelse`, Ryo ensures all error and null cases are handled, preventing silent failures and unexpected panics. This design choice makes error handling visible and intentional.
+
 ## 8. Traits (Behavior)
 
 *   **Definition:** `trait Name: fn method(...) ... { /* optional default impl */ }`. Default methods allowed. *(Rationale: Default methods reduce boilerplate).*
@@ -605,14 +640,14 @@ fn critical_operation():
 *   **Structure:** Composed of distinct packages (e.g., `io`, `string`, `collections`, `net.http`, `ffi`). Users import only needed packages. *(Rationale: Reduces binary size, improves compile times, makes dependencies explicit).*
 *   **Core Packages (Initial):**
     *   `core`/`builtin` (Implicit): Core traits (`Drop`, `From`, `Length` for `.len(self)`), built-in functions (`print`, `println`, `panic`), error and optional type support.
-    *   `io`: Console (`readln`), Files (`File`), Buffering (using `Result`, implements `Drop`).
-    *   `string`: `&str` manipulation, parsing (`parse_* -> Result`).
+    *   `io`: Console (`readln`), Files (`File`), Buffering (functions return `IoError!T`), implements `Drop`.
+    *   `string`: `&str` manipulation, parsing (functions return `ParseError!T`).
     *   `collections`: `List[T]`, `Map[K, V]` types and methods.
     *   `math`: Functions, constants, explicit overflow methods.
     *   `time`: `Instant`, `SystemTime`, `Duration`.
-    *   `encoding.json`: `encode -> Result[str]`, `decode -> Result[JsonValue]`, `decode_into[T] -> Result[T]`.
-    *   `net.http`: Async Client/Server primitives (`Request`, `Response`, async handlers).
-    *   `os`: Env, args, basic filesystem ops (using `Result`).
+    *   `encoding.json`: `encode -> JsonError!str`, `decode -> JsonError!JsonValue`, `decode_into[T] -> JsonError!T`.
+    *   `net.http`: Async Client/Server primitives (`Request`, `Response`, async handlers, functions return `HttpError!T`).
+    *   `os`: Env, args, basic filesystem ops (functions return `OsError!T`).
     *   `testing`: `#[test]` attribute, `assert()`, `assert_eq()`. *(Planned)*
     *   `sync`: `Shared[T]`/`Weak[T]` types for optional shared ownership.
     *   `mem`: Basic memory utilities, `Drop` trait definition.

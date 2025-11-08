@@ -52,16 +52,21 @@ else:
 
 **Ryo:**
 ```ryo
-fn divide(a: int, b: int) -> Result[int, str]:
-    if b == 0:
-        return Err("Division by zero")
-    return Ok(a / b)
+error MathError:
+    DivisionByZero
 
-match divide(10, 2):
-    Ok(result):
-        print(f"Result: {result}")
-    Err(msg):
-        print(f"Division failed: {msg}")
+fn divide(a: int, b: int) -> MathError!int:
+    if b == 0:
+        return MathError.DivisionByZero
+    return a / b
+
+result = divide(10, 2) catch |e|:
+    match e:
+        MathError.DivisionByZero:
+            print("Division failed: division by zero")
+    return
+
+print(f"Result: {result}")
 ```
 
 **Migration Path:**
@@ -137,7 +142,7 @@ fn main():
 |---------|----|----|-----------|
 | **Memory Safety** | Manual memory management, GC | Ownership with compile-time checks | Ryo: Memory safety without GC overhead |
 | **Type System** | Simple but limited | Static with inference and generics | Ryo: More expressive while staying simple |
-| **Error Handling** | `if err != nil` pattern | Result types with `?` operator | Ryo: More ergonomic error handling |
+| **Error Handling** | `if err != nil` pattern | Error types with `try`/`catch` | Ryo: More ergonomic error handling |
 | **Generics** | Recently added, limited | Designed from the ground up | Ryo: More powerful generic system |
 | **Concurrency** | Goroutines and channels | Async/await with structured concurrency | Both: Excellent, different approaches |
 

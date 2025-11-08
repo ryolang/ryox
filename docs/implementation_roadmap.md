@@ -104,7 +104,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 
 **Tasks:**
 - Define built-in `Result` enum concept in type system
-- Allow functions to return `Result[int, SomeErrorType]`
+- Allow functions to return error unions (`ErrorType!int`)
 - Integrate `ariadne` for syntax/type error reporting using spans
 - Improve error messages for parsing and basic type mismatches
 
@@ -204,7 +204,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 These features are planned for early post-v1.0 releases as they're critical for practical development:
 
 - **Full Generics System:** Complete generic types with trait bounds (see [proposals.md](proposals.md#advanced-generics))
-- **Enhanced Error Handling:** Standard error traits and improved `?` operator ergonomics
+- **Enhanced Error Handling:** Standard error traits and improved `try`/`catch` ergonomics
 - **Standard Library Expansion:** HTTP client, JSON parsing, file system operations
 - **Package Registry:** Central package repository and dependency resolution
 
@@ -254,7 +254,7 @@ The 14 milestones above represent the **minimum viable language** needed for Ryo
 ✅ **Memory Safety:** Ownership and borrowing prevent common memory errors
 ✅ **Async Concurrency:** Native async/await for scalable applications
 ✅ **Type Safety:** Static typing with inference catches errors at compile time
-✅ **Error Handling:** Result types and `?` operator for robust error management
+✅ **Error Handling:** Error types and error unions with `try`/`catch` for robust error management
 ✅ **Performance:** Compiled native code with predictable memory usage
 ✅ **Interoperability:** Basic FFI for integrating with existing C libraries
 ✅ **Developer Experience:** Clear error messages and basic tooling

@@ -166,9 +166,10 @@ enum Option[T]:
     Some(T)
     None
 
-# Note: error types use 'error' keyword instead of enum
-error Result[E]:
-    Err(E)
+# Error types use 'error' keyword with ADT support
+error ProcessingError:
+    InvalidInput(str)
+    ParseFailed
 
 # Usage
 maybe = Option[str].Some("hello")
@@ -195,10 +196,9 @@ where T: Serializable {
 **Multiple Bounds**
 ```ryo
 # Future syntax for multiple trait bounds
-fn process[T](data: T) -> Result[ProcessedData, Error]
-where T: Serializable + Clone + Send {
+fn process[T](data: T) -> ProcessingError!ProcessedData
+where T: Serializable + Clone + Send:
     # Implementation using multiple T capabilities
-}
 ```
 
 **Where Clauses**
@@ -433,7 +433,7 @@ impl From[ParseError] for AppError:
     fn from(err: ParseError) -> AppError:
         return AppError.Parse(err)
 
-# Error propagation with try operator
+# Error propagation with try keyword
 fn process_file(path: str) -> AppError!ProcessedData:
     content = try files.read_text(path)   # IoError -> AppError automatically
     config = try parse_config(content)    # ParseError -> AppError automatically
@@ -1084,7 +1084,7 @@ Based on analysis of missing features and their importance to Ryo's goals, here 
 **Phase 1: Foundation**
 1. **Advanced Generics** - User-defined generic types and functions with trait bounds
 2. **Iterator System** - Standard iterator traits and lazy evaluation 
-3. **Standard Error Trait** - Unified error handling with `From` trait for `?` operator
+3. **Standard Error Trait** - Unified error handling with `From` trait for `try` keyword
 
 *Rationale: These are fundamental features required for building reusable, robust code. Essential for any serious development work and library ecosystem.*
 
@@ -1121,7 +1121,7 @@ Based on analysis of missing features and their importance to Ryo's goals, here 
 - Current async/await concurrency model
 - Basic ownership and borrowing
 - Fundamental types and collections
-- Basic error handling with `Result[T, E]`
+- Basic error handling with error types and error unions (`ErrorType!SuccessType`)
 
 **Version 1.5 (Essential Extensions):**
 - Advanced generics system
