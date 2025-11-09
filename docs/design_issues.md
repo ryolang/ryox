@@ -347,6 +347,115 @@ fn process_shapes(shapes: List[&dyn Drawable]):
 2. Resolve borrow/move inconsistency - Keep in file for later review
 10. Clarify array/slice syntax - Keep in file for later review
 
+## Design Decision: Stack Traces vs Performance Trade-Off ✅ RESOLVED
+
+**Decision**: Ryo prioritizes **debugging capability over raw performance**. Stack traces are **always captured and included by default**.
+
+### The Trade-Off
+
+**Option A: Always Capture Stack Traces** ✅ **CHOSEN**
+- **Pros:**
+  - Best debugging experience - developers can always see where errors occurred
+  - Transparent - no configuration needed to get debugging info
+  - Consistent behavior across all deployments
+  - Python-like developer experience (always have traceback)
+  - Fault analysis is immediate without reproducing issues
+- **Cons:**
+  - ~5-10% runtime overhead (estimate, varies by workload)
+  - ~20-30% larger binary size (due to DWARF debug symbols)
+  - Memory overhead for maintaining stack frame information
+
+**Option B: Debug-Only Stack Traces**
+- **Pros:**
+  - Zero overhead in release builds
+  - Better performance in production
+  - Smaller release binaries (no debug symbols)
+- **Cons:**
+  - Different behavior between debug and release builds (confusing)
+  - Production crashes lack debugging info (must reproduce with debug build)
+  - More complex tooling (need separate debug and release artifacts)
+  - Common source of "works in debug, fails in production" issues
+
+**Option C: Opt-In Stack Traces**
+- **Pros:**
+  - Zero cost when disabled
+  - Developers choose trade-off per application
+- **Cons:**
+  - Easy to forget to enable for troubleshooting
+  - Inconsistent debugging across projects
+  - Defeats purpose if not enabled when needed
+  - Complexity - must manage feature flag
+
+**Option D: No Stack Traces**
+- **Pros:**
+  - Zero overhead, maximum performance
+  - Minimal complexity in runtime
+- **Cons:**
+  - Worst debugging experience
+  - Requires external tools (debuggers, logging)
+  - Poor for production incident response
+  - Contradicts Ryo's goal of being "easy to debug"
+
+### Rationale for Chosen Approach
+
+Ryo's design philosophy emphasizes **developer productivity and debugging** over micro-optimization. The reasoning:
+
+1. **Developer Time is Expensive**: The 5-10% performance cost is often worth 10x faster debugging
+2. **Production Incidents**: When systems fail in production, having stack traces is invaluable
+3. **Zero Configuration**: No environment variables or flags needed for normal debugging
+4. **Consistency**: Same behavior in all build modes - no surprises
+5. **Python Heritage**: Ryo targets developers from Python who expect always-available tracebacks
+6. **Real-World Data**: Profile before optimizing - most applications won't be bottlenecked by stack trace overhead
+
+### Implementation Details
+
+- **DWARF Format**: Debug symbols generated via Cranelift backend
+- **Always Included**: No compiler flag needed
+- **Strippable**: `--strip` flag can remove debug symbols for production if needed (not recommended)
+- **Controllable Output**: `RYOLANG_BACKTRACE` environment variable controls verbosity
+- **Accessible at Runtime**: `.location()` and `.stack_trace()` methods available on errors
+
+### When This Trade-Off Makes Sense
+
+This trade-off is appropriate for Ryo because:
+
+1. **Target Use Cases**: Web services, CLI tools, data processing - rarely performance-limited by stack traces
+2. **Development Speed**: Most projects prioritize fast debugging over 5% performance gain
+3. **Production Operations**: Stack traces from production errors are worth the cost
+4. **Ecosystem Compatibility**: Aligns with Python/JavaScript/Go patterns (always have stack traces)
+
+### When This Might NOT Make Sense
+
+For applications where this trade-off is problematic:
+- Extreme real-time systems (sub-millisecond latencies)
+- Embedded systems with very tight memory constraints
+- Performance-critical inner loops running billions of times
+
+**Mitigation**: Use `--strip` to remove debug symbols, or profile to verify stack traces aren't actually the bottleneck.
+
+### Comparison with Other Languages
+
+| Language | Stack Traces | Default | Trade-off |
+|----------|--------------|---------|-----------|
+| **Ryo** | ✅ Always | Always captured | Performance < Debugging |
+| Python | ✅ Always | Always captured | Performance < Debugging |
+| Go | ✅ Always | Always captured | Performance < Debugging |
+| Rust | ✅ With RUST_BACKTRACE | Opt-in | Performance > Debugging |
+| C/C++ | ❌ Manual setup | Manual logging | Performance > Debugging |
+| Java | ✅ Always | Always captured | Performance < Debugging |
+
+Ryo aligns with Python/Go (developer-friendly) rather than Rust (performance-optimized).
+
+### Future Flexibility
+
+While the v1.0 decision is firm, future versions can provide:
+- Lazy stack trace materialization (only capture on error)
+- Sampling profilers for production monitoring
+- Conditional compilation to disable in extremely hot code paths
+- Zero-cost abstractions for performance-critical sections
+
+The decision is not irrevocable, but the default remains: **debugging capability first**.
+
 ## Next Steps (Remaining Issues)
 
 **Before Implementation Begins:**

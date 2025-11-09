@@ -769,7 +769,193 @@ match divide(10, 2) {
 
 * **Ryo is ideal for:** Web services, data processing, CLI tools, game development, and systems that need both safety and simplicity.
 
-## 10. Next Steps
+## 10. Debugging Your Ryo Programs
+
+When something goes wrong, Ryo provides helpful debugging information to quickly identify and fix the problem.
+
+### Understanding Error Messages
+
+When an error occurs in your Ryo program, you'll get a clear message with location information:
+
+```ryo
+module user:
+    error NotFound(id: int)
+
+fn get_user(id: int) -> user.NotFound!User:
+    if id < 0:
+        # This error will capture: file, line, column, function name
+        return user.NotFound(id)
+    # ... fetch user ...
+    User{...}
+
+fn main():
+    user = get_user(42) catch |e|:
+        # Access error message
+        print(f"Error: {e.message()}")
+
+        # Find where the error occurred
+        if loc = e.location():
+            print(f"Location: {loc.file}:{loc.line}:{loc.column} in {loc.function}")
+```
+
+### Reading Panic Messages
+
+When your program panics (hits an unrecoverable error), it prints diagnostic information before stopping:
+
+```
+thread 'main' panicked at src/main.ryo:42:13 in function 'critical_operation':
+  Database connection failed
+
+Stack trace:
+  0: main::critical_operation (src/main.ryo:42:13)
+  1: main::initialize (src/main.ryo:18:5)
+  2: main (src/main.ryo:10:5)
+
+note: Set RYOLANG_BACKTRACE=full for more verbose output
+```
+
+**Reading the output:**
+- **Thread and message**: Which function panicked and why
+- **File:line:column**: Exact location of the panic
+- **Stack trace**: Each frame shows a function call leading to the panic
+  - Frame 0 is the panic (most recent)
+  - Top frame in stack is the entry point (oldest)
+- **Frame format**: `function_path (file:line:column)`
+
+### Using Stack Traces for Debugging
+
+Stack traces show you the complete call chain. To understand a panic:
+
+1. **Read the panic message** - What went wrong?
+2. **Check frame 0** - Where did it panic?
+3. **Follow the stack** - How did we get there?
+
+Example:
+
+```ryo
+fn validate_age(age: int):
+    if age < 0 or age > 150:
+        panic(f"Invalid age: {age}")  # This is frame 0
+
+fn create_user(name: str, age: int) -> User:
+    validate_age(age)  # This is frame 1
+    User{name: name, age: age}
+
+fn main():
+    # This is frame 2
+    user = create_user("Alice", -5)
+    # Panic occurs here!
+```
+
+When this panics, the stack trace shows exactly where (-5 is invalid age) and how we got there (create_user called validate_age).
+
+### Accessing Error Location and Stack Trace
+
+Ryo errors automatically capture debugging information. You can access it at runtime:
+
+```ryo
+result = risky_operation() catch |e|:
+    # Get where the error was created
+    if location = e.location():
+        print(f"Error at {location.file}:{location.line}")
+        print(f"In function: {location.function}")
+
+    # Get the full call stack at time of error
+    if trace = e.stack_trace():
+        print("Stack frames:")
+        for frame in trace.frames:
+            print(f"  {frame.function} at {frame.file}:{frame.line}")
+```
+
+### Debugging Tips
+
+**1. Use descriptive error messages:**
+```ryo
+# ❌ Not helpful
+error Error(str)
+# Error when creating user? Error when validating? Unclear.
+
+# ✅ Better
+error ValidationFailed(field: str, reason: str)
+# Clear what failed and why
+```
+
+**2. Include context in errors:**
+```ryo
+module database:
+    error QueryFailed(sql: str, reason: str)
+
+fn query_users(age: int) -> database.QueryFailed!List[User]:
+    sql = f"SELECT * FROM users WHERE age > {age}"
+    result = try db.execute(sql)
+    # Error will show the SQL query, helping you debug
+
+```
+
+**3. Print location for quick diagnosis:**
+```ryo
+result = operation() catch |e|:
+    if loc = e.location():
+        # Go directly to the source code location
+        print(f"Fix it here: {loc.file}:{loc.line}")
+```
+
+**4. Avoid panics in production code:**
+```ryo
+# ❌ Bad - panics are unrecoverable
+fn divide(a: float, b: float) -> float:
+    if b == 0:
+        panic("Cannot divide by zero!")  # Crashes entire program
+    a / b
+
+# ✅ Better - use error types
+module math:
+    error DivisionByZero
+
+fn divide(a: float, b: float) -> math.DivisionByZero!float:
+    if b == 0:
+        return math.DivisionByZero  # Caller can handle it
+    a / b
+```
+
+**5. Use environment variables to control stack trace detail:**
+```bash
+# See standard stack trace (default)
+./my_program
+
+# See verbose stack trace with more detail
+RYOLANG_BACKTRACE=full ./my_program
+
+# Turn off stack trace (not recommended)
+RYOLANG_BACKTRACE=0 ./my_program
+```
+
+### Common Debugging Scenarios
+
+**Scenario 1: "Where did this error come from?"**
+```ryo
+result = complex_operation() catch |e|:
+    loc = e.location()  # Points directly to the source
+```
+
+**Scenario 2: "Why did my program panic?"**
+- Read the panic message and frame 0
+- Check the source code at that location
+- See what condition triggered the panic
+
+**Scenario 3: "How does the error propagate through my code?"**
+```ryo
+result = complex_operation() catch |e|:
+    if trace = e.stack_trace():
+        for (i, frame) in enumerate(trace.frames):
+            print(f"{i}: {frame.function}")  # Shows the call path
+```
+
+### Performance Note
+
+Ryo automatically captures stack traces when errors occur. This adds a small overhead (about 5-10%) but is enabled by default because debugging is more important than micro-optimizations. If your program is performance-critical, profile it first to see if stack trace capture is actually a bottleneck.
+
+## 11. Next Steps
 
 Congratulations on completing this Getting Started guide! You've learned the basics of Ryo syntax.
 

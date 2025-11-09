@@ -441,7 +441,51 @@ fn parse_json(text: str) -> parse.InvalidSyntax!Data:
 *   **Error Trait:** All error types automatically implement the `Error` trait:
     ```ryo
     trait Error:
-        fn message(self) -> str  # Human-readable message
+        fn message(self) -> str           # Human-readable message
+        fn location(self) -> ?Location    # Where error was created
+        fn stack_trace(self) -> ?StackTrace  # Call stack when created
+
+    struct Location:
+        file: str          # File path (absolute or relative)
+        line: int          # Line number (1-indexed)
+        column: int        # Column number (1-indexed)
+        function: str      # Function name with module path
+
+    struct StackTrace:
+        frames: List[StackFrame]
+
+    struct StackFrame:
+        function: str      # Function name with module path
+        file: str          # File path
+        line: int          # Line number
+        column: int        # Column number
+    ```
+
+*   **Automatic Location Tracking:** All error values automatically capture the location where they are created:
+    *   **`.location()`** returns `Location` with file, line, column, and function name
+    *   **`.stack_trace()`** returns the full call stack (list of frames) at error creation
+    *   Useful for debugging: find exactly where an error originated
+    *   Works across error propagation with `try` - stack grows as error bubbles up
+
+    Example:
+    ```ryo
+    module file:
+        error NotFound(path: str)
+
+    fn find_config() -> file.NotFound!Config:
+        # Error created here captures: line 5, column 8, file "src/main.ryo"
+        return file.NotFound("/etc/config.toml")
+
+    fn main():
+        config = find_config() catch |e|:
+            # Access location information
+            loc = e.location()  # Returns Location{file: "src/main.ryo", line: 5, ...}
+            print(f"Error at {loc.file}:{loc.line}:{loc.column} in {loc.function}")
+
+            # Get full stack trace
+            trace = e.stack_trace()
+            for frame in trace.frames:
+                print(f"  {frame.function} at {frame.file}:{frame.line}")
     ```
 
 *   **Automatic Message Generation:**
@@ -481,11 +525,15 @@ fn parse_json(text: str) -> parse.InvalidSyntax!Data:
             return f"{self.field} cannot exceed {self.max_length} characters"
     ```
 
-*   **Accessing Error Messages:**
+*   **Accessing Error Messages and Location:**
     ```ryo
     result = operation() catch |e|:
         # Access message directly
         print(e.message())
+
+        # Access location information for debugging
+        if loc = e.location():
+            print(f"Error at {loc.file}:{loc.line} in {loc.function}")
 
         # Or use in catch handlers
         match e:
@@ -493,9 +541,13 @@ fn parse_json(text: str) -> parse.InvalidSyntax!Data:
                 print(f"Not found: {msg}")
             _:
                 print(f"Error: {e.message()}")
+                if trace = e.stack_trace():
+                    print("Stack trace:")
+                    for frame in trace.frames:
+                        print(f"  {frame.function} at {frame.file}:{frame.line}")
     ```
 
-*   *(Rationale: Error messages are essential for debugging and user feedback. Automatic generation from data reduces boilerplate. Custom implementations enable domain-specific messages.)*
+*   *(Rationale: Error messages are essential for debugging and user feedback. Automatic generation from data reduces boilerplate. Custom implementations enable domain-specific messages. Location tracking and stack traces enable efficient debugging without requiring external tools or logging.)*
 
 ### 4.11 FFI Types
 
@@ -686,7 +738,30 @@ fn load_and_parse(path: str) -> !Config:
         return b
     ```
 
-*   *(Rationale: `try` clearly signals error propagation. Familiar to async/await users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired).)*
+*   **Error Context Preservation:** When `try` propagates an error, the original error's location and stack trace are preserved intact. No context is lost as the error bubbles up through the call stack. Each level can inspect `.location()` and `.stack_trace()` to see where the error originated.
+
+    Example:
+    ```ryo
+    fn level3() -> db.QueryFailed!Result:
+        # Error created here with location information
+        return db.QueryFailed("Invalid query")
+
+    fn level2() -> db.QueryFailed!Result:
+        result = try level3()  # Error propagates, context preserved
+        return result
+
+    fn level1() -> !Result:
+        result = try level2()  # Error propagates, context preserved
+        return result
+
+    fn main():
+        data = level1() catch |e|:
+            # Can still access original location from level3
+            loc = e.location()
+            print(f"Original error at {loc.file}:{loc.line}")
+    ```
+
+*   *(Rationale: `try` clearly signals error propagation. Familiar to async/await users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired). Error context preservation ensures debugging information is never lost during propagation.)*
 
 ### 7.4 Error Handling (`catch`)
 
@@ -779,7 +854,7 @@ fn authenticate(db: Database, token: ?str) -> !User:
 
 ### 7.6 Unrecoverable Errors (`panic`)
 
-For unrecoverable errors, use `panic("message")`:
+For unrecoverable errors, use `panic("message")`. When a panic occurs, the program immediately terminates after printing diagnostic information.
 
 ```ryo
 fn critical_operation():
@@ -787,8 +862,89 @@ fn critical_operation():
         panic("System not initialized!")  # Aborts immediately
 ```
 
-*   **Behavior:** Aborts the process. **Does not unwind** (simplifies implementation and predictability).
-*   *(Rationale: Simplest, safest default for truly unrecoverable situations.)*
+#### **Panic Behavior**
+
+*   **Aborts the process immediately** with exit code `101`
+*   **Does not unwind** - no cleanup code runs (simplifies implementation and predictability)
+*   **Captures and prints full stack trace** - shows complete call chain leading to panic
+*   **Includes location information** - file, line, column, and function name of panic call
+
+#### **Panic Output Format**
+
+When `panic("message")` executes, output appears on stderr:
+
+```
+thread 'main' panicked at src/database.ryo:42:13 in function 'connect':
+  Database connection failed: timeout after 30s
+
+Stack trace:
+  0: database::connect (src/database.ryo:42:13)
+  1: app::initialize (src/app.ryo:18:25)
+  2: main (src/main.ryo:10:5)
+
+note: Set RYOLANG_BACKTRACE=full for more verbose output
+```
+
+**Stack trace details:**
+- Each frame shows: frame number, function path, file:line:column location
+- Frame 0 is the panic call (most recent)
+- Frame N is the entry point (oldest)
+- Includes inlined functions and async boundaries
+
+#### **Debug Symbols and Stack Traces**
+
+*   **Debug symbols always included** by default (DWARF format via Cranelift)
+*   **Stack traces automatically captured** - no performance trade-off option in v1.0
+*   **Binary size impact** - approximately 20-30% larger with debug symbols
+*   **Environment variable `RYOLANG_BACKTRACE`** controls output verbosity:
+    - `RYOLANG_BACKTRACE=1` (default) - standard stack trace
+    - `RYOLANG_BACKTRACE=full` - verbose output with additional context
+    - `RYOLANG_BACKTRACE=0` - minimal output (not recommended, disables stack trace)
+
+#### **Performance Implications**
+
+*   **Stack trace capture adds overhead** (~5-10% estimated, varies by workload)
+*   **Memory overhead** for maintaining stack frame information
+*   **Trade-off philosophy**: Developer productivity and debugging capability prioritized over raw performance
+*   **Mitigation strategies**:
+    - For performance-critical inner loops, structure code to avoid panic in hot paths
+    - Use error types for recoverable errors instead of panics
+    - Consider `RYOLANG_BACKTRACE=0` only in extreme cases (not recommended)
+
+#### **When to Use `panic`**
+
+Use `panic()` **only** for:
+- Truly unrecoverable conditions that indicate a bug in your program
+- Invalid program state that cannot be recovered
+- Internal consistency violations
+
+Do **not** use `panic()` for:
+- User input errors (use error types instead)
+- Expected failure modes (use error types instead)
+- Control flow (use error types instead)
+
+#### **Example: Understanding a Panic**
+
+```ryo
+module database:
+    error ConnectionFailed(reason: str)
+
+fn connect(host: str, port: int) -> database.ConnectionFailed!Connection:
+    if port < 1 or port > 65535:
+        # BUG: Invalid port should never reach here if caller validates
+        panic(f"Invalid port {port}: must be 1-65535")
+
+    # ... actual connection code ...
+    Connection{...}
+
+fn main():
+    # If this panics with invalid port, stack trace shows:
+    # 1. panic location (in connect function)
+    # 2. call to connect (in main)
+    # 3. where to fix the bug
+```
+
+*   *(Rationale: Immediate abort without unwinding simplifies runtime and guarantees clean termination. Comprehensive stack traces provide essential debugging information for post-mortem analysis.)*
 
 ### 7.7 Error Handling Best Practices
 
@@ -833,6 +989,124 @@ if maybe_user != none:
 ```
 
 *   **Rationale:** Direct unwrap removes type safety. By requiring explicit `try`/`catch`/`orelse`, Ryo ensures all error and null cases are handled, preventing silent failures and unexpected panics. This design choice makes error handling visible and intentional.
+
+### 7.9 Stack Traces and Debugging
+
+Ryo provides comprehensive stack trace and debugging information to help diagnose runtime errors efficiently.
+
+#### **Automatic Stack Trace Capture**
+
+*   **Always captured** - Stack traces are automatically captured for all panics and errors
+*   **No performance trade-off option** - Debugging capability is prioritized over micro-optimization
+*   **Full call chain** - Shows complete function call path from entry point to error location
+*   **Accessible at runtime** - Use `.stack_trace()` method on errors to access frame information
+
+#### **Using Stack Traces for Debugging**
+
+**From Panics:**
+```ryo
+fn dangerous_operation() -> int:
+    panic("Something went very wrong!")
+
+fn main():
+    # When panic occurs, stderr shows:
+    # thread 'main' panicked at src/main.ryo:10:5 in function 'dangerous_operation':
+    # Something went very wrong!
+    #
+    # Stack trace:
+    #   0: main::dangerous_operation (src/main.ryo:10:5)
+    #   1: main (src/main.ryo:5:5)
+    dangerous_operation()
+```
+
+**From Errors:**
+```ryo
+module db:
+    error QueryFailed(sql: str)
+
+fn query_user(id: int) -> db.QueryFailed!User:
+    # Error automatically captures file/line/function at creation
+    return db.QueryFailed(f"SELECT * FROM users WHERE id = {id}")
+
+fn main():
+    user = query_user(42) catch |e|:
+        # Access location where error was created
+        if loc = e.location():
+            print(f"Error created at {loc.file}:{loc.line} in {loc.function}")
+
+        # Access full stack at time of error creation
+        if trace = e.stack_trace():
+            for frame in trace.frames:
+                print(f"  Frame: {frame.function} at {frame.file}:{frame.line}")
+        return
+```
+
+#### **Debug Symbols and Build Information**
+
+*   **Debug symbols always included by default** - DWARF format generated via Cranelift
+*   **Binary size impact** - Approximately 20-30% larger due to debug information
+*   **`--strip` compiler flag** - Remove debug symbols from production binaries if size is critical
+*   **Trade-off confirmed** - Size cost justified by debugging capability
+
+#### **Environment Variables**
+
+Control stack trace verbosity:
+
+*   **`RYOLANG_BACKTRACE=1`** (default) - Standard stack trace with file, line, column, function name
+*   **`RYOLANG_BACKTRACE=full`** (future) - Verbose output with additional context and local values
+*   **`RYOLANG_BACKTRACE=0`** (not recommended) - Minimal output, disables stack trace display
+
+Example:
+```bash
+# Show standard stack trace (default)
+./my_program
+
+# Show verbose stack trace
+RYOLANG_BACKTRACE=full ./my_program
+
+# Suppress stack trace (not recommended)
+RYOLANG_BACKTRACE=0 ./my_program
+```
+
+#### **Performance and Overhead**
+
+*   **Runtime overhead** - Stack trace capture adds approximately 5-10% overhead (varies by workload)
+*   **Memory overhead** - Maintaining stack frame information uses additional memory
+*   **Trade-off philosophy** - Debugging capability and developer productivity prioritized over raw performance
+*   **Mitigation strategies**:
+    - Structure performance-critical code to avoid panics in hot paths
+    - Use error types for recoverable errors instead of panics
+    - Profile real-world workloads to measure actual impact
+
+#### **Best Practices for Debugging**
+
+1. **Use error location for quick diagnosis:**
+   ```ryo
+   result = risky_operation() catch |e|:
+       loc = e.location()
+       print(f"Quick fix: Check {loc.file}:{loc.line}")
+   ```
+
+2. **Print full stack trace for complex error chains:**
+   ```ryo
+   result = risky_operation() catch |e|:
+       print(f"Error: {e.message()}")
+       if trace = e.stack_trace():
+           print("Debug stack trace:")
+           for frame in trace.frames:
+               print(f"  {frame.function}")
+   ```
+
+3. **Use messages with context:**
+   ```ryo
+   error DatabaseError(sql: str, reason: str)
+   # When error occurs, message includes both query and reason
+   ```
+
+4. **Avoid panics in production paths:**
+   - Use error types for expected failures
+   - Reserve `panic()` for bugs and internal inconsistencies
+   - Structured error handling is better for debugging than post-mortem panic analysis
 
 ## 8. Traits (Behavior)
 

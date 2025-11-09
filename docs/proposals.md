@@ -979,6 +979,97 @@ fn parallel_add(a: simd.f32x4, b: simd.f32x4) -> simd.f32x4:
 
 ---
 
+### **Stack Trace and Debugging Enhancements**
+
+**Current Implementation (v1.0):**
+- Automatic stack trace capture for all panics and errors
+- Location information (file, line, column, function) automatically tracked
+- `.location()` and `.stack_trace()` methods on Error trait
+- DWARF debug symbols included by default
+- `RYOLANG_BACKTRACE` environment variable for controlling output
+
+**Future Enhancements (v1.5+):**
+
+1. **Verbose Stack Traces**
+   - `RYOLANG_BACKTRACE=full` displays local variable values
+   - Show argument values at each stack frame
+   - Display register state (optional, for low-level debugging)
+   - Example:
+   ```
+   Frame 0: main::divide (src/main.ryo:42:13)
+     a = 10.0
+     b = 0.0
+   ```
+
+2. **Async Stack Traces**
+   - Show await points in async call chains
+   - Distinguish between sync and async frames
+   - Display future state transitions
+   - Crucial for debugging complex async applications
+
+3. **Custom Panic Handlers**
+   ```ryo
+   # Allow registering custom panic handlers
+   fn custom_panic_handler(panic_info: PanicInfo):
+       # Custom logging, error reporting, cleanup
+       log_error_to_monitoring_service(panic_info)
+       cleanup_resources()
+
+   thread::set_panic_handler(custom_panic_handler)
+   ```
+
+4. **Source Code in Stack Traces**
+   - Display source code snippets for each frame
+   - Highlight the specific line that caused the panic
+   - Example:
+   ```
+   Frame 0: main::divide (src/main.ryo:42:13)
+     42: let result = a / b
+              ^^^^^^ panic: divide by zero
+   ```
+
+5. **Structured Error Output**
+   - JSON format for stack traces (for tool integration)
+   - Machine-readable error information
+   - Integration with monitoring/logging services
+   ```json
+   {
+     "panic": "divide by zero",
+     "location": {"file": "src/main.ryo", "line": 42, "column": 13},
+     "stack": [
+       {"function": "divide", "file": "src/main.ryo", "line": 42}
+     ]
+   }
+   ```
+
+6. **Debugger Integration**
+   - Integration with gdb/lldb for interactive debugging
+   - Breakpoint support
+   - Step through execution
+   - Watch variables
+
+7. **Core Dump Generation**
+   - Optional core dumps for post-mortem analysis
+   - Memory state preservation
+   - External analysis tools support
+
+8. **Performance Optimization**
+   - Lazy stack trace capture (only materialize on error/panic)
+   - Sampling profiler integration
+   - Zero-cost when no errors occur (theoretical goal)
+
+**Rationale:**
+
+The v1.0 implementation provides solid debugging foundation. Future enhancements address:
+- **Async debugging** (increasingly important for modern applications)
+- **Tool integration** (CI/CD, monitoring, crash reporting services)
+- **Performance optimization** (if stack trace overhead becomes a real bottleneck)
+- **Advanced debugging** (verbose output for complex issues)
+
+These are valuable but not essential for initial launch, allowing iterative improvement based on real-world usage patterns.
+
+---
+
 ## Contributing to Language Proposals
 
 These language proposals are open for discussion and contribution:
