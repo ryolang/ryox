@@ -101,10 +101,12 @@ async fn data_pipeline():
 
 ### **Implementation Timeline**
 
+**Status:** CSP is a planned future extension. The design is detailed in this document, but implementation phases have not yet been scheduled. Async/await remains the primary concurrency model for near-term releases.
+
 - **Phase 1**: Core async/await implementation (current focus)
-- **Phase 2**: Basic channel types and operations
-- **Phase 3**: Select statement and advanced channel features  
-- **Phase 4**: Integration with async runtime and optimization
+- **Phase 2**: Basic channel types and operations (planned, not scheduled)
+- **Phase 3**: Select statement and advanced channel features (planned, not scheduled)
+- **Phase 4**: Integration with async runtime and optimization (planned, not scheduled)
 
 ### **Rationale**
 

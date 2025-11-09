@@ -60,6 +60,7 @@ Ryo synthesizes ideas from several modern programming languages:
     *   *(Rationale: Uses `#` as the base. The `#:` marker provides an unambiguous distinction for documentation tooling, avoiding whitespace sensitivity and block comment syntax. Attributes `#[...]` remain separate).*
 *   **Attributes:** Metadata annotations use the `#[...]` syntax, placed before the documented item. *(Rationale: Distinct syntax using brackets clearly separates attributes from code and comments).*
 *   **Indentation:** **Tabs** strictly denote code blocks. One tab per indentation level. Mixing tabs and spaces for indentation is a compile-time error. *(Rationale: Enforces a single, consistent style like Go, avoids common Python indentation issues).*
+    - **Note:** Code examples in this documentation may display spaces for markdown rendering compatibility, but actual `.ryo` source files **MUST** use tabs. The compiler will enforce this requirement and reject files with mixed tabs and spaces.
 *   **Statements:** Generally one per line; semicolons are not required or used.
 
 ## 3. Syntax & Grammar
@@ -100,7 +101,7 @@ Ryo synthesizes ideas from several modern programming languages:
         *   *(Rationale: Bidirectional type checking provides the right balance - function signatures serve as documentation and API contracts while local code remains concise. This matches developer expectations from Rust/TypeScript and provides better error messages than fully implicit systems like Hindley-Milner).*
 *   **Struct Definition:** `struct Name: field: Type ...`
 *   **Enum Definition:** `enum Name: Variant1, Variant2(Type), Variant3 { field: Type } ...`
-*   **Trait Definition:** `trait Name: fn method(...) -> RetType ... { /* optional default */ }`
+*   **Trait Definition:** `trait Name: fn method(...) -> RetType ... (with optional default implementation)`
 *   **Implementation:** `impl Trait for Type: fn method(...) -> RetType: ...`
     ```ryo
     struct Counter:
@@ -138,7 +139,7 @@ Ryo synthesizes ideas from several modern programming languages:
 *   `int`: Defaults to `isize` (signed pointer-sized integer).
 *   `float`: Defaults to `float64` (64-bit IEEE 754 float).
 *   `bool`: `true`, `false`.
-*   `str`: Owned, growable, heap-allocated, UTF-8 string. Mutable if bound `mut`. *(Rationale: Provides a primary, easy-to-use string type. Mutability controlled by binding aligns with general variable mutability).*
+*   `str`: Owned, heap-allocated, UTF-8 string. Can grow and shrink dynamically when bound to a `mut` variable. *(Rationale: Provides a primary, easy-to-use string type. Mutability controlled by binding aligns with general variable mutability).*
 *   `char`: Unicode Scalar Value. Literal: `'a'`.
 *   `void`: Unit type. Represents a value with no data. Used for functions that return no meaningful value. Reserved keyword for future implementation. *(Rationale: Provides explicit way to represent "no return value" concept, common in many programming languages for side-effecting functions)*.
 *   Explicit Sizes: `i8`-`i64`, `u8`-`u64`, `usize`, `float32`. *(Rationale: Necessary for control over representation, performance, and FFI).**
@@ -154,6 +155,18 @@ Ryo synthesizes ideas from several modern programming languages:
 *   `&[T]`: Borrowed, immutable slice of `T` elements (pointer + element length). Created via `my_list[start..end]`, `my_list.as_slice()`.
 *   `&mut [T]`: Borrowed, *mutable* slice of `T` elements. Created via `my_mut_list.as_mut_slice()`. Requires `mut` borrow of source.
 *   *(Rationale: `&` syntax leverages borrow concept. No `&mut str` initially simplifies UTF-8 safety. Slices provide efficient read-only/mutable views without copying).*
+
+**Function Parameter Note:** When using slice types like `&str` or `&[T]` as function parameters, the `&` is *required* because these are slice types, not owned types. Example:
+```ryo
+fn process_string(s: &str):      # Explicit & required for string slices
+    # ... read s ...
+
+fn process_list(items: &[int]):  # Explicit & required for list slices
+    # ... read items ...
+
+fn process_owned(data: MyStruct): # No & needed - implicit immutable borrow
+    # ... read data ...
+```
 
 ### 4.5 Struct Type (Product Type)
 
@@ -505,15 +518,15 @@ fn parse_json(text: str) -> parse.InvalidSyntax!Data:
             *   **Important Distinction:** This default implicit borrow for function arguments *contrasts* with the default *move* semantics for assignment and return values. This choice prioritizes ergonomics for the common case of read-only function access (enhancing Pythonic feel) over strict uniformity. Developers must be aware that `my_func(my_var)` typically borrows `my_var` immutably (leaving `my_var` valid), while `let new_var = my_var` moves `my_var` (invalidating `my_var`). The compiler must provide clear error messages when ownership rules are violated due to this distinction.
             *   *(Example Added)*
                 ```ryo
-                fn process_data(data: &SomeType) { # Explicit borrow, same effect as implicit
+                fn process_data(data: &SomeType): # Explicit borrow, same effect as implicit
                     # ... read data ...
-                }
-                fn read_data(data: SomeType) { # Implicit immutable borrow
+
+                fn read_data(data: SomeType): # Implicit immutable borrow
                     # ... read data ...
-                }
-                fn consume_data(move data: SomeType) { # Explicit move (alternative to default borrow)
+
+                fn consume_data(move data: SomeType): # Explicit move (alternative to default borrow)
                     # ... takes ownership ...
-                }
+
                 fn main():
                     my_data = SomeType { ... }
                     read_data(my_data) # Implicitly borrows my_data, my_data still valid here
@@ -570,7 +583,20 @@ module io:
 
 ### 7.2 Error Union Types
 
-Function return types specify both the error type and success type:
+Function return types specify both the error type and success type. Ryo provides three ways to express error types, each with different use cases:
+
+#### **Choosing Your Error Union Syntax**
+
+| Syntax | Use Case | Example |
+|--------|----------|---------|
+| `ErrorType!T` | Single, specific error type | `fn read(path) -> FileNotFound!str` |
+| `(E1\|E2\|E3)!T` | Multiple known error types | `fn load() -> (FileNotFound\|ParseError)!Data` |
+| `!T` | Any/inferred error types | `fn process() -> !Result` (compiler infers all errors from `try`) |
+
+**Decision Guide:**
+- **Use `ErrorType!T`** when your function can only fail in one specific way
+- **Use `(E1|E2)!T`** when you know exactly which errors can occur and want to document them
+- **Use `!T`** when composing multiple functions with different errors - the compiler automatically infers the error union from `try` expressions
 
 #### **Single Error Type**
 
@@ -635,12 +661,12 @@ fn load_and_parse(path: str) -> !Config:
 
 *   **Semantic:** `try expr` evaluates `expr`:
     *   If success: returns the value
-    *   If error: propagates error to caller (with optional conversion via `From` trait)
+    *   If error: propagates error to caller
 
 *   **Error Composition with `try`:**
     *   In functions with inferred error unions, `try` automatically collects all error types
-    *   In explicit error unions, error must be in the union or convertible via `From` trait
-    *   In single error type, error must match exactly or be convertible via `From` trait
+    *   In explicit error unions, error must be in the union
+    *   In single error type, error must match exactly
 
 *   **Example - Inferred Union:**
     ```ryo
@@ -660,9 +686,11 @@ fn load_and_parse(path: str) -> !Config:
         return b
     ```
 
-*   *(Rationale: `try` clearly signals error propagation. Familiar to async/await users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired). From trait provides explicit control when needed.)*
+*   *(Rationale: `try` clearly signals error propagation. Familiar to async/await users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired).)*
 
 ### 7.4 Error Handling (`catch`)
+
+**IMPORTANT:** Error handling with `catch` requires **exhaustive pattern matching**. All error types and variants must be explicitly handled. If you don't want to handle specific error cases explicitly, use the `_` wildcard pattern to match remaining cases.
 
 The `catch` operator handles errors with pattern matching:
 
@@ -808,7 +836,7 @@ if maybe_user != none:
 
 ## 8. Traits (Behavior)
 
-*   **Definition:** `trait Name: fn method(...) ... { /* optional default impl */ }`. Default methods allowed. *(Rationale: Default methods reduce boilerplate).*
+*   **Definition:** `trait Name: fn method(...) ...` (with optional default implementations). Default methods allowed. *(Rationale: Default methods reduce boilerplate).*
 *   **Implementation:** `impl Trait for Type: fn method(...) ...`. Can override defaults.
 *   **Dispatch:** **Static Dispatch** via monomorphization only (initially). *(Rationale: Prioritizes runtime performance and implementation simplicity).* No dynamic dispatch (`dyn Trait`).
     *   This means polymorphism is primarily achieved through generics (compile-time polymorphism). Patterns requiring runtime dynamic dispatch (common in some OOP/dynamic languages) will need alternative approaches in Ryo, such as using enums with associated data to represent variants or passing function pointers/closures.
@@ -860,7 +888,7 @@ if maybe_user != none:
 ## 12. Application Entry Point
 
 *   **Convention:** Default entry point file is `src/main.ryo`.
-*   **`fn main()`:** Required in entry point. Takes no parameters, returns nothing. Use `try/catch` for error handling within main.
+*   **`fn main()`:** Required in entry point. Takes no parameters, returns the unit type (empty tuple `()`). Use `try/catch` for error handling within main.
 *   **Compiler Enforcement:** `fn main()` only allowed in the designated entry point file for executable compilation. *(Rationale: Clear convention without needing `package main` keyword).*
 
 ## 13. Package Manager (`ryopkg`)

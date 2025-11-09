@@ -185,7 +185,7 @@ fn add(x: int, y: int) -> int: # Function to add two integers, returns an intege
 
 ### Variables
 
-Ryo uses **implicit variable declaration** within functions. You simply use a variable name, and the compiler infers its type based on the value assigned to it.
+Variables in Ryo **do not require a declaration keyword**. You simply use a variable name, and the compiler infers its type based on the value assigned to it. Variables are **immutable by default**; use the `mut` keyword for mutable variables.
 
 ```ryo
 fn example_variables():
