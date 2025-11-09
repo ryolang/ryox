@@ -103,7 +103,7 @@ Ryo synthesizes ideas from several modern programming languages:
 *   **Trait Definition:** `trait Name: fn method(...) -> RetType ... { /* optional default */ }`
 *   **Implementation:** `impl Trait for Type: fn method(...) -> RetType: ...`
     ```ryo
-    struct Counter: 
+    struct Counter:
         count: int
     trait Resettable:
         fn reset(&mut self)
@@ -116,11 +116,8 @@ Ryo synthesizes ideas from several modern programming languages:
 
 *   **Async/Await:** `async fn name() -> RetType:`, `await expression`,
     ```ryo
-    error NetworkError:
-        ConnectionFailed
-        TimeoutError
 
-    async fn fetch_data() -> NetworkError!Data:
+    async fn fetch_data() -> !Data:
         response = try await http.get("https://api.example.com/data")
         data = try await response.json[Data]()
         return data
@@ -355,9 +352,9 @@ fn parse_json(text: str) -> parse.InvalidSyntax!Data:
 
 *   **Explicit Single Error Type** (`ErrorType!T`):
     ```ryo
-    fn read_file(path: str) -> FileError!str:
+    fn read_file(path: str) -> io.FileNotFound!str:
         if not exists(path):
-            return FileError.FileNotFound(path)
+            return io.FileNotFound(path)
         return os.read(path)
     ```
 
@@ -555,21 +552,21 @@ Error handling in Ryo uses algebraic error types (defined with the `error` keywo
 
 ### 7.1 Error Types and Definitions
 
-Error types are defined with the `error` keyword and support variants with associated data:
+Error types are defined with the `error` keyword, using modules to organize related errors:
 
 ```ryo
-error NetworkError:
-    ConnectionTimeout
-    DnsResolutionFailed(domain: str)
-    HttpError(status: int, message: str)
+module network:
+    error ConnectionTimeout
+    error DnsResolutionFailed(domain: str)
+    error HttpError(status: int, message: str)
 
-error FileError:
-    NotFound(path: str)
-    PermissionDenied(path: str)
-    ReadFailed(reason: str)
+module io:
+    error NotFound(path: str)
+    error PermissionDenied(path: str)
+    error ReadFailed(reason: str)
 ```
 
-*   *(Rationale: `error` keyword signals error-handling intent. Associated data enables rich error information.)*
+*   *(Rationale: `error` keyword signals error-handling intent. Single-variant errors with module organization provide clear composition without wrapper types. Associated data enables rich error information.)*
 
 ### 7.2 Error Union Types
 
@@ -656,21 +653,10 @@ fn load_and_parse(path: str) -> !Config:
 
 *   **Example - Explicit Union with Conversion:**
     ```ryo
-    error AppError:
-        File(FileError)
-        Parse(ParseError)
-
-    impl From[FileError] for AppError:
-        fn from(err: FileError) -> AppError:
-            return AppError.File(err)
-
-    impl From[ParseError] for AppError:
-        fn from(err: ParseError) -> AppError:
-            return AppError.Parse(err)
-
-    fn process() -> AppError!Data:
-        a = try read_file(path)  # FileError -> AppError via From trait
-        b = try parse_json(a)    # ParseError -> AppError via From trait
+    # Example using separate error types with error unions
+    fn process() -> (FileError | ParseError)!Data:
+        a = try read_file(path)  # Can return FileError
+        b = try parse_json(a)    # Can return ParseError
         return b
     ```
 
@@ -734,37 +720,7 @@ config = load_and_parse("app.toml") catch |e|:
 
 *   *(Rationale: `catch` follows familiar error-handling conventions. Exhaustive matching for all error types (single or union) ensures all error cases are explicitly handled, improving code reliability and preventing silent failures.)*
 
-### 7.5 Error Conversion (`From` Trait)
-
-The `From` trait enables automatic error conversion with the `try` operator:
-
-```ryo
-trait From[T]:
-    fn from(value: T) -> Self
-
-impl From[FileError] for AppError:
-    fn from(err: FileError) -> AppError:
-        return AppError.File(err)
-
-impl From[ParseError] for AppError:
-    fn from(err: ParseError) -> AppError:
-        return AppError.Parse(err)
-
-# With From trait implementations, try automatically converts errors
-fn high_level() -> AppError!Data:
-    content = try read_file("data.txt")
-    # FileError automatically converted to AppError via From trait
-
-    parsed = try parse_data(content)
-    # ParseError automatically converted to AppError via From trait
-
-    return process(parsed)
-```
-
-*   **Automatic Conversion:** When `try` encounters an error, it attempts to convert it using the `From` trait.
-*   *(Rationale: Eliminates boilerplate error conversion. Standard pattern from Rust.)*
-
-### 7.6 Combined Error + Optional (`!?T`)
+### 7.5 Combined Error + Optional (`!?T`)
 
 For operations that can fail (error), return no value (`none`), or succeed:
 
@@ -793,7 +749,7 @@ fn authenticate(db: Database, token: ?str) -> !User:
 *   **Smart Casting:** Values are automatically narrowed after unwrapping.
 *   *(Rationale: Handles real-world patterns where operations can both error and return optional data.)*
 
-### 7.7 Unrecoverable Errors (`panic`)
+### 7.6 Unrecoverable Errors (`panic`)
 
 For unrecoverable errors, use `panic("message")`:
 
@@ -806,16 +762,16 @@ fn critical_operation():
 *   **Behavior:** Aborts the process. **Does not unwind** (simplifies implementation and predictability).
 *   *(Rationale: Simplest, safest default for truly unrecoverable situations.)*
 
-### 7.8 Error Handling Best Practices
+### 7.7 Error Handling Best Practices
 
 1. **Use `try` for propagating errors** in functions that return error unions
 2. **Use `catch` for handling errors** at boundaries (main functions, API handlers)
 3. **Define specific error types** that capture all failure modes
-4. **Implement `From` trait** for error composition across layers
+4. **Use modules to organize related errors** ensuring clear composition
 5. **Use `!?T` carefully** to distinguish between errors and legitimate absence
 6. **Pattern match exhaustively** to handle all error variants
 
-### 7.9 Forbidden: Direct Unwrap
+### 7.8 Forbidden: Direct Unwrap
 
 **Direct unwrap is NOT allowed.** Attempting to access error or optional values without using `try`, `catch`, or `orelse` is a **compile-time error**:
 
@@ -869,11 +825,7 @@ if maybe_user != none:
     *   **Ownership Integration:** Async functions work seamlessly with Ryo's ownership model - values can be moved into async contexts safely.
 *   **Examples:**
     ```ryo
-    error NetworkError:
-        ConnectionFailed
-        RequestTimeout
-
-    async fn process_request(req: Request) -> NetworkError!Response:
+    async fn process_request(req: Request) -> !Response:
         data = try await database.query("SELECT * FROM users")
         result = try await external_api.call(data)
         return Response.json(result)

@@ -5,9 +5,9 @@ Welcome to ⚡ Ryo **/ˈraɪoʊ/** (Rye-oh), a programming language designed for
 This guide will walk you through the basics of Ryo and help you write your first programs. Let's get started!
 
 !!! info "Installation Required"
-    
+
     Before following this guide, make sure you have Ryo installed on your system. See the [Installation Guide](installation.md) for detailed setup instructions.
-    
+
     You can verify your installation by running:
     ```bash
     ryo --version
@@ -115,10 +115,10 @@ fn main():
     # Get user input
     print("Enter a temperature value:")
     input_value = float(input())
-    
+
     print("Enter the scale (C for Celsius, F for Fahrenheit, K for Kelvin):")
     input_scale = input()
-    
+
     # Create Temperature struct based on input
     temp = match input_scale:
         "C" | "c":
@@ -130,12 +130,12 @@ fn main():
         _:
             print("Invalid scale! Defaulting to Celsius.")
             Temperature{value: input_value, scale: TempScale.Celsius}
-    
+
     # Convert to all scales and display
     celsius = to_celsius(temp)
     fahrenheit = to_fahrenheit(temp)
     kelvin = to_kelvin(temp)
-    
+
     print(f"Celsius: {celsius.value:.2f}°C")
     print(f"Fahrenheit: {fahrenheit.value:.2f}°F")
     print(f"Kelvin: {kelvin.value:.2f}K")
@@ -664,13 +664,13 @@ Ryo uses an ownership model inspired by Rust but simplified for better learnabil
 fn create_and_use():
     # 'message' owns this string data
     message = "Hello, Ryo!"
-    
+
     # The 'print' function borrows 'message' temporarily
     print(message)
-    
+
     # 'message' is still valid here
     print(f"Length: {len(message)}")
-    
+
     # When 'message' goes out of scope, its memory is automatically freed
 ```
 
@@ -712,18 +712,17 @@ See how Ryo compares when handling potential errors:
 
 **Ryo:**
 ```ryo
-error DivideError:
-    DivisionByZero
+error DivisionByZero
 
-fn divide(a: int, b: int) -> DivideError!int:
+fn divide(a: int, b: int) -> DivisionByZero!int:
     if b == 0:
-        return DivideError.DivisionByZero
+        return DivisionByZero
     return a / b
 
 # Usage
 result = divide(10, 2) catch |e|:
     match e:
-        DivideError.DivisionByZero:
+        DivisionByZero:
             print("Error: Division by zero")
     return
 
@@ -737,7 +736,7 @@ def divide(a, b):
         return a / b
     except ZeroDivisionError:
         return "Division by zero"
-        
+
 # Usage
 result = divide(10, 2)
 if isinstance(result, str):

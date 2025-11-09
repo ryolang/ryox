@@ -166,10 +166,10 @@ enum Option[T]:
     Some(T)
     None
 
-# Error types use 'error' keyword with ADT support
-error ProcessingError:
-    InvalidInput(str)
-    ParseFailed
+# Error types use 'error' keyword (single-variant)
+module processing:
+    error InvalidInput(str)
+    error ParseFailed
 
 # Usage
 maybe = Option[str].Some("hello")
@@ -511,12 +511,6 @@ fn legacy_interface() -> !ProcessedData:
     config = try parse_config(content)    # parse.InvalidFormat error
     return process(config)
 # Compiler automatically infers: (io.ReadFailed | parse.InvalidFormat)!ProcessedData
-
-# Optional: Use From trait for explicit conversion in special cases
-impl From[io.ReadFailed] for AppError:
-    fn from(err: io.ReadFailed) -> AppError:
-        # Custom conversion logic if needed
-        return AppError.IoError(err.reason)
 ```
 
 #### **Future: Error Context and Chaining**
@@ -920,11 +914,11 @@ pub extern "C" fn process_point(p: *const Point) -> f64:
 fn ryo_str_to_c(s: &str) -> (*const c_char, usize):
     return (s.as_ptr(), s.len())
 
-error ConversionError:
-    InvalidUtf8
-    NullPointer
+module conversion:
+    error InvalidUtf8
+    error NullPointer
 
-fn c_str_to_ryo(ptr: *const c_char) -> ConversionError!str:
+fn c_str_to_ryo(ptr: *const c_char) -> conversion.InvalidUtf8!str:
     unsafe:
         # Safe conversion with validation
         return try ffi.cstr_to_string(ptr)
@@ -1151,12 +1145,12 @@ A high-performance web framework leveraging Ryo's async capabilities and memory 
 ```ryo
 import web
 
-error HttpError:
-    NotFound
-    DatabaseError(message: str)
+module http:
+    error NotFound
+    error DatabaseError(message: str)
 
 #[route("/users/{id}")]
-async fn get_user(id: int) -> HttpError!JsonResponse[User]:
+async fn get_user(id: int) -> (http.NotFound | http.DatabaseError)!JsonResponse[User]:
     user = try await database.find_user(id)
     return JsonResponse.new(user)
 
