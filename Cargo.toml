@@ -13,7 +13,7 @@ clap = { version = "4.0", features = ["derive"] }
 cranelift = "0.124.0"
 cranelift-jit = "0.124.0"
 cranelift-module = "0.124.0"
-cranelift-object = "0.124.0"
+cranelift-object = "0.125.3"
 logos = "0.15"
 target-lexicon = "0.13"
 
