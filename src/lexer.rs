@@ -189,17 +189,17 @@ mod tests {
 
     #[test]
     fn lex_struct_literal() {
-        let tokens = tokenize("Point{x: 1 y: 2}");
+        let tokens = tokenize("Point(x=1 y=2)");
         assert_eq!(tokens.len(), 9);
         assert!(matches!(tokens[0], Token::Ident("Point")));
-        assert_eq!(tokens[1], Token::LBrace);
+        assert_eq!(tokens[1], Token::LParen);
         assert!(matches!(tokens[2], Token::Ident("x")));
-        assert_eq!(tokens[3], Token::Colon);
+        assert_eq!(tokens[3], Token::Assign);
         assert!(matches!(tokens[4], Token::Int("1")));
         assert!(matches!(tokens[5], Token::Ident("y")));
-        assert_eq!(tokens[6], Token::Colon);
+        assert_eq!(tokens[6], Token::Assign);
         assert!(matches!(tokens[7], Token::Int("2")));
-        assert_eq!(tokens[8], Token::RBrace);
+        assert_eq!(tokens[8], Token::RParen);
     }
 
     #[test]

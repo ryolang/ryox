@@ -33,7 +33,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 - ✅ Define core tokens (`Token` enum in `src/lexer.rs`) using `logos`:
   - ✅ Keywords: `fn`, `if`, `else`, `return`, `mut`, `struct`, `enum`, `match`
   - ✅ Identifiers, integer literals, basic operators (`=`, `+`, `-`, `*`, `/`, `:`)
-  - ✅ Punctuation (`(`, `)`, `{`, `}`)
+  - ✅ Punctuation: `(`, `)`, `{`, `}` (braces reserved for f-string interpolation in later milestones)
   - ✅ Handle whitespace/comments (Python-style `#` comments)
 - ✅ Write comprehensive tests for the lexer (19 unit tests)
 - ✅ Create simple CLI harness (`src/main.rs`) using `clap`
@@ -46,6 +46,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 - Comments handled correctly (skipped from token stream)
 - Comprehensive test suite covers edge cases (keyword keyword-as-part-of-identifier distinction, comment handling, etc.)
 - CLI tested with realistic Ryo code samples
+- **Design Decision:** Struct literals use parentheses with named arguments `Point(x=1, y=2)`, not braces. Curly braces are reserved exclusively for f-string interpolation (e.g., `f"Hello {name}"`) which will be implemented in later milestones.
 
 ### Milestone 2: Parser & AST Basics
 **Goal:** Parse simple variable declarations and integer literals into an Abstract Syntax Tree
