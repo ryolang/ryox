@@ -713,26 +713,31 @@ config = load_and_parse("app.toml") catch |e|:
                     # ...
                 # MUST handle all variants
         ```
-    *   **Error Union** (non-exhaustive): Can handle some variants, others propagate
+    *   **Error Union** (Exhaustive matching required): Must handle all error types in union:
         ```ryo
         result = process(path) catch |e|:
             match e:
-                FileError.NotFound(p):
+                io.FileNotFound(p):
                     return create_default(p)
-                # Don't need to handle ParseError or NetworkError
-                # Unhandled errors propagate up
+                parse.InvalidFormat(reason):
+                    log_error(f"Parse error: {reason}")
+                    return default_config()
+                network.ConnectionFailed(reason):
+                    return retry_later()
+                # MUST handle all variants in union
         ```
-    *   **With Catch-All**: Handle some specifically, catch rest
+    *   **With Catch-All**: When you want generic handling for some errors:
         ```ryo
         result = process(path) catch |e|:
             match e:
-                FileError.NotFound(p):
+                io.FileNotFound(p):
                     return create_default(p)
-                else:
-                    panic(f"Unexpected error: {e.message()}")
+                _:  # Explicit catch-all for all other error types
+                    log_error(e.message())
+                    return default_config()
         ```
 
-*   *(Rationale: `catch` follows familiar error-handling conventions. Exhaustive matching for single types ensures safety. Non-exhaustive matching for unions allows flexible error handling at API boundaries.)*
+*   *(Rationale: `catch` follows familiar error-handling conventions. Exhaustive matching for all error types (single or union) ensures all error cases are explicitly handled, improving code reliability and preventing silent failures.)*
 
 ### 7.5 Error Conversion (`From` Trait)
 

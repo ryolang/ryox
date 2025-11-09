@@ -550,7 +550,7 @@ fn load_user_config(user_id: int) -> !(UserConfig):
 - ✅ **Automatic inference**: Compiler tracks error types from `try` expressions
 - ✅ **Type safety**: All errors are tracked and checked by the type system
 - ✅ **Ergonomic**: `try` keyword makes error propagation natural
-- ✅ **Flexible**: Exhaustive matching for certainty, non-exhaustive for flexibility
+- ✅ **Safety First**: Exhaustive matching by default ensures all error cases are handled; explicit catch-all (`_`) for generic handling when needed
 - ✅ **Composable**: Functions naturally compose without explicit error mapping
 
 **See the [Language Specification](specification.md) Sections 4.9, 4.10, and 7.2-7.4 for complete error handling documentation.**

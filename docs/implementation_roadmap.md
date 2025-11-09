@@ -99,16 +99,18 @@ This roadmap outlines the planned development of the Ryo programming language co
 
 **Visible Progress:** Can run programs with basic conditional logic
 
-### Milestone 7: Basic Result Type & Error Reporting
-**Goal:** Introduce `Result<T, E>` for error handling and improve compiler error messages
+### Milestone 7: Single-Variant Error Types & Error Reporting
+**Goal:** Introduce single-variant `error` keyword for error handling and improve compiler error messages
 
 **Tasks:**
-- Define built-in `Result` enum concept in type system
-- Allow functions to return error unions (`ErrorType!int`)
+- Define `error` keyword in lexer/parser for single-variant error definitions
+- Organize related errors using modules (`module name: error ErrorType`)
+- Allow functions to return error types (`ErrorType!SuccessType`) and error unions (`(ErrorA | ErrorB)!SuccessType`)
+- Implement automatic error union inference from `try` expressions
 - Integrate `ariadne` for syntax/type error reporting using spans
 - Improve error messages for parsing and basic type mismatches
 
-**Visible Progress:** Better error messages! Can define functions returning `Result`
+**Visible Progress:** Better error messages! Can define and handle single-variant errors with automatic union composition
 
 ## Phase 3: Ownership & Memory Safety
 
@@ -150,16 +152,16 @@ This roadmap outlines the planned development of the Ryo programming language co
 
 **Visible Progress:** Can write simple loops and use dynamic lists
 
-### Milestone 11: Mutable Borrows & Error Handling
-**Goal:** Implement mutable variables, mutable borrows, and `?` operator
+### Milestone 11: Mutable Borrows & Error Handling Ergonomics
+**Goal:** Implement mutable variables, mutable borrows, and `try`/`catch` operators
 
 **Tasks:**
 - Extend Parser/AST/Checker: Handle `mut` keyword
 - Extend Checker: Implement mutable borrow rules (no aliasable mutable borrows)
 - Extend Codegen: Handle loading/storing mutable variables, passing mutable pointers
-- Extend Parser/Checker/Codegen: Implement `?` operator logic
+- Extend Parser/Checker/Codegen: Implement `try` keyword for error propagation and `catch` for error handling
 
-**Visible Progress:** Core ownership model complete! `Result` ergonomics improved
+**Visible Progress:** Core ownership model complete! Error handling ergonomics improved with `try`/`catch`
 
 ## Phase 4: Concurrency & Interoperability
 

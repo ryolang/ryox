@@ -55,18 +55,22 @@ struct User:
     id: int
     name: str
 
-error HttpError:
-    NetworkFailure(reason: str)
-    InvalidResponse
+module http:
+    error NetworkFailure(reason: str)
+    error InvalidResponse
 
-async fn fetch_user(id: int) -> HttpError!User:
+async fn fetch_user(id: int) -> (http.NetworkFailure | http.InvalidResponse)!User:
     response = try await http.get(f"https://api.example.com/users/{id}")
     user = try await response.json[User]()
     return user
 
 fn main():
     user = fetch_user(1) catch |e|:
-        print(f"Error fetching user: {e}")
+        match e:
+            http.NetworkFailure(reason):
+                print(f"Network error: {reason}")
+            http.InvalidResponse:
+                print("Invalid response")
         return
     print(f"Hello, {user.name}!")
 ```

@@ -95,11 +95,11 @@ Ryo isn't just a collection of features - it's a carefully designed synthesis:
 
 ```ryo
 # Python-like syntax
-error PriceError:
-    OutOfStock
-    InvalidPrice(reason: str)
+module price:
+    error OutOfStock
+    error InvalidPrice(reason: str)
 
-fn calculate_total(items: List[Item]) -> PriceError!float:
+fn calculate_total(items: List[Item]) -> (price.OutOfStock | price.InvalidPrice)!float:
     # Rust/Mojo-like ownership (simplified)
     total = 0.0
     for item in items:
@@ -370,11 +370,11 @@ match value:
 
 #### Async Functions
 ```ryo
-error HttpError:
-    ConnectionFailed(reason: str)
-    RequestTimeout
+module http:
+    error ConnectionFailed(reason: str)
+    error RequestTimeout
 
-async fn fetch_data() -> HttpError!Data:
+async fn fetch_data() -> (http.ConnectionFailed | http.RequestTimeout)!Data:
     response = try await http.get("https://api.example.com")
     data = try await response.json()
     return data
@@ -399,10 +399,10 @@ enum Color:
     Green
     Blue
 
-# Error type for error handling
-error FileError:
-    NotFound(path: str)
-    PermissionDenied(path: str)
+# Error types for error handling
+module file:
+    error NotFound(path: str)
+    error PermissionDenied(path: str)
 
 # Struct literal (uses braces)
 point = Point{x: 3.14, y: 2.71}
@@ -411,7 +411,7 @@ point = Point{x: 3.14, y: 2.71}
 color = Color.Red
 
 # Error variant
-error = FileError.NotFound("config.toml")
+error = file.NotFound("config.toml")
 ```
 
 #### Optional Types (`?T`)

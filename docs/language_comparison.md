@@ -224,7 +224,7 @@ async fn main():
 ### Choose Ryo over Go when:
 - **Memory safety is non-negotiable:** Systems programming, security-critical applications
 - **More expressive types needed:** Complex domain modeling, API design
-- **Better error handling desired:** Exhaustive error checking, `?` operator ergonomics
+- **Better error handling desired:** Exhaustive error checking, `try`/`catch` ergonomics
 - **No GC overhead acceptable:** Real-time systems, predictable performance
 
 ### Choose Ryo over TypeScript when:
@@ -251,7 +251,7 @@ async fn main():
 
 ### From Go
 1. **Adopt memory safety:** Learn ownership to prevent memory bugs
-2. **Enhance error handling:** Use Result types and `?` operator
+2. **Enhance error handling:** Use error types with `try`/`catch` and automatic error unions
 3. **Upgrade type system:** Leverage generics and inference
 4. **Similar simplicity:** Maintain minimalist philosophy
 5. **Better tooling:** Modern compiler and package manager
