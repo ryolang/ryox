@@ -79,6 +79,32 @@
 //! - Prevents undefined behavior
 //! - Simple implementation
 //!
+//! ## Exit Code Handling
+//!
+//! All programs currently exit with code 0 (success). This matches industry standards
+//! where successful programs return 0 by convention.
+//!
+//! **Design Decision:** Previous versions (Milestone 3.0) used the last expression's value
+//! as the exit code, but this was changed because:
+//! - No other mainstream language uses this pattern
+//! - Confusing and error-prone (assignments look like exit codes)
+//! - Incompatible with future features (functions, types, error handling)
+//! - Violates "explicit is better than implicit" principle
+//!
+//! **Current Behavior (Milestone 3.1+):**
+//! ```ryo
+//! x = 42    # Program exits with code 0 (not 42)
+//! y = 100   # Still exits with code 0
+//! ```
+//!
+//! **Future (Milestone 4+):** Explicit exit codes will be supported via return statements:
+//! ```ignore
+//! fn main() -> int:
+//!     if error_condition:
+//!         return 1    // Error
+//!     return 0        // Success
+//! ```
+//!
 //! ## No Bounds Checking
 //!
 //! Current Milestone 3 limitations:
@@ -349,19 +375,24 @@ impl Codegen {
 
         // Step 3: Evaluate each statement
         // Currently, we only support variable declarations (e.g., `x = 42`).
-        // We evaluate the initializer expression and keep track of the last value.
-        // NOTE: Variables are NOT stored yet - they're just evaluated.
-        // The last evaluated value becomes the program's return value.
-        let mut result_val = None;
+        // We evaluate the initializer expressions for their side effects (though in
+        // Milestone 3, expressions have no side effects - this is preparation for future).
+        // NOTE: Variables are NOT stored yet - they're just evaluated and discarded.
         for stmt in program.statements {
-            // Extract the variable declaration from the statement
-            let val = Self::eval_expr(builder, &stmt.kind.as_var_decl().initializer, int_type)?;
-            result_val = Some(val);
+            // Evaluate the expression but don't use its value
+            // The underscore prefix indicates the value is intentionally unused
+            let _val = Self::eval_expr(builder, &stmt.kind.as_var_decl().initializer, int_type)?;
         }
 
-        // Step 4: Return the last value (or 0 if no statements produced a value)
-        let return_val = result_val.unwrap_or_else(|| builder.ins().iconst(int_type, 0));
-        builder.ins().return_(&[return_val]);
+        // Step 4: Return 0 (success) by default
+        // All programs exit with code 0, following the Unix convention where 0 indicates success.
+        // Explicit exit codes will be added in Milestone 4 via return statements.
+        // Design Decision: Changed from "last expression value" to "implicit 0" because:
+        // - Aligns with industry standards (Rust, Go, Python, C)
+        // - Less confusing (assignments don't look like exit codes)
+        // - Future-proof for functions and error handling
+        let zero = builder.ins().iconst(int_type, 0);
+        builder.ins().return_(&[zero]);
 
         Ok(())
     }

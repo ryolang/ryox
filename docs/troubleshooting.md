@@ -212,45 +212,44 @@ Error: LinkError("... library not found for -lc")
 
 ## Runtime Issues
 
-### Unexpected Exit Codes
+### Exit Codes in Milestone 3
 
-**Symptom:**
-```
-x = -1
-[Result] => 255  # Expected -1
+**Current Behavior:**
+
+All Milestone 3 programs exit with code 0 (success), regardless of expression values.
+
+**Example:**
+```ryo
+x = 42       # Evaluates to 42, but exits with 0
+result = -1  # Evaluates to -1, but exits with 0
 ```
 
-**Cause:** On Unix/macOS, exit codes are 8-bit unsigned (0-255). Negative numbers wrap around.
+**Output:**
+```
+[Result] => 0
+```
 
 **Explanation:**
 
-Exit codes in Unix are unsigned bytes:
-- Range: 0-255
-- Negative values wrap: `-1` → `255`, `-2` → `254`, etc.
-- Large values wrap: `256` → `0`, `257` → `1`, etc.
+This is intentional behavior that aligns with industry standards:
+- Exit code 0 indicates success (Unix/Linux/macOS convention)
+- Non-zero exit codes traditionally indicate errors
+- Explicit exit codes will be added in Milestone 4 via return statements
 
-**Examples:**
+**Future (Milestone 4+):**
+
+Explicit exit code control via return statements:
 ```ryo
-x = 0      # Returns 0
-x = 1      # Returns 1
-x = 255    # Returns 255
-x = 256    # Returns 0 (wraps)
-x = -1     # Returns 255 (wraps: 256 - 1)
-x = -42    # Returns 214 (wraps: 256 - 42)
+# Planned syntax (NOT YET IMPLEMENTED)
+fn main() -> int:
+    if error_condition:
+        return 1    # Error
+    return 0        # Success
 ```
 
-**Solution:**
+**If you need specific exit codes now:**
 
-1. **By design:** This is expected Unix behavior
-2. **Design programs** to return 0-255 range
-3. **Use 0 for success**, 1-255 for errors:
-   ```ryo
-   status = 0    # Success
-   status = 1    # Generic error
-   status = 2    # Specific error code
-   ```
-
-**Windows Note:** Windows supports full 32-bit exit codes, so negative numbers work there.
+The current implementation always returns 0. To test error conditions or specific exit codes, you'll need to wait for Milestone 4.
 
 ---
 

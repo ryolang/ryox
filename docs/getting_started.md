@@ -143,38 +143,49 @@ The final executable runs natively on your platform with no runtime overhead.
 
 #### Understanding Exit Codes
 
-Currently, Ryo programs **return the value of the last expression as the exit code**:
+Currently, Ryo Milestone 3 programs **always exit with code 0 (success)**:
 
 ```ryo
-x = 42    # Program exits with code 42
+x = 42    # Evaluates to 42, but program exits with code 0
 ```
 
-**Exit Code Range:**
-- **Unix/macOS/Linux**: 0-255 (8-bit unsigned)
-  - Values wrap: `-1` becomes `255`, `256` becomes `0`
-- **Windows**: Full 32-bit signed integer range
+**Why 0?**
+- By convention, exit code 0 means "success" on Unix/Linux/macOS
+- Non-zero exit codes traditionally indicate errors
+- This aligns with how other languages (Rust, Python, Go) handle default exit codes
+
+**Exit Code Behavior:**
+- **All programs exit with 0** in Milestone 3
+- Expressions are evaluated correctly but don't affect the exit code
+- Explicit exit codes will be added in Milestone 4
 
 **Example:**
 ```ryo
-result = 2 + 3 * 4    # 2 + 12 = 14
-# Program exits with code 14
+result = 2 + 3 * 4    # Computes 2 + 12 = 14
+# Program exits with code 0 (not 14)
 ```
 
-**Why exit codes?**
-- In Milestone 3, there's no `print()` yet, so exit codes are how programs communicate results
-- Exit code 0 traditionally means "success" in Unix
-- Non-zero exit codes indicate errors or specific results
+**Future (Milestone 4+):**
+Explicit exit codes via return statements:
+```ryo
+# Planned syntax (NOT YET IMPLEMENTED)
+fn main() -> int:
+    if error_condition:
+        return 1    # Error
+    return 0        # Success
+```
 
 **Checking exit codes:**
 ```bash
 # Run program
 cargo run -- run program.ryo
+# [Result] => 0
 
 # Check the exit code (Unix/macOS)
-echo $?
+echo $?         # Shows: 0
 
 # Check the exit code (Windows)
-echo %ERRORLEVEL%
+echo %ERRORLEVEL%  # Shows: 0
 ```
 
 #### What Gets Generated

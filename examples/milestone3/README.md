@@ -16,19 +16,21 @@ Milestone 3 completes the compilation pipeline, enabling:
 ### simple.ryo
 **Purpose:** Basic example showing the simplest possible program
 **Content:** `x = 42`
-**Exit Code:** 42
+**Exit Code:** 0 (success)
 **Demonstrates:** Literal integer compilation
 
 ```bash
 cargo run -- run examples/milestone3/simple.ryo
-# [Result] => 42
+# [Result] => 0
 ```
 
+**Note:** The expression evaluates to 42, but all Milestone 3 programs exit with 0 (success). Explicit exit codes will be added in Milestone 4.
+
 ### exit_zero.ryo
-**Purpose:** Example returning a zero exit code (success)
+**Purpose:** Example demonstrating successful program execution
 **Content:** `x = 0`
-**Exit Code:** 0
-**Demonstrates:** Success exit code
+**Exit Code:** 0 (success)
+**Demonstrates:** Success exit code (all programs exit with 0)
 
 ```bash
 cargo run -- run examples/milestone3/exit_zero.ryo
@@ -38,32 +40,34 @@ cargo run -- run examples/milestone3/exit_zero.ryo
 ### arithmetic.ryo
 **Purpose:** Arithmetic expression with multiple operators
 **Content:** `result = 2 + 3 * 4`
-**Exit Code:** 14
+**Exit Code:** 0 (success)
 **Demonstrates:**
 - Operator precedence (* before +)
 - Binary operations compilation
+- Expression evaluation (result is 14, but exit code is 0)
 
 ```bash
 cargo run -- run examples/milestone3/arithmetic.ryo
-# [Result] => 14
+# [Result] => 0
 ```
 
-Calculation: 2 + (3 * 4) = 2 + 12 = 14
+**Calculation:** 2 + (3 * 4) = 2 + 12 = 14 (computed correctly, exits with 0)
 
 ### parenthesized.ryo
 **Purpose:** Override default precedence with parentheses
 **Content:** `result = (10 + 5) * 2`
-**Exit Code:** 30
+**Exit Code:** 0 (success)
 **Demonstrates:**
 - Parenthesized expressions
 - Precedence control
+- Expression evaluation (result is 30, but exit code is 0)
 
 ```bash
 cargo run -- run examples/milestone3/parenthesized.ryo
-# [Result] => 30
+# [Result] => 0
 ```
 
-Calculation: (10 + 5) * 2 = 15 * 2 = 30
+**Calculation:** (10 + 5) * 2 = 15 * 2 = 30 (computed correctly, exits with 0)
 
 ### multiple.ryo
 **Purpose:** Program with multiple variable declarations
@@ -73,15 +77,31 @@ x = 10
 y = 20
 z = 30
 ```
-**Exit Code:** 30
+**Exit Code:** 0 (success)
 **Demonstrates:**
 - Multiple statements in one program
-- Program returns the last statement's value
+- All statements evaluated, program exits with 0
 
 ```bash
 cargo run -- run examples/milestone3/multiple.ryo
-# [Result] => 30
+# [Result] => 0
 ```
+
+### exit_code_future.ryo
+**Purpose:** Documentation of planned future exit code syntax
+**Content:** Comments showing Milestone 4+ syntax, with working Milestone 3 code
+**Exit Code:** 0 (success)
+**Demonstrates:**
+- Future syntax for explicit exit codes (planned for Milestone 4)
+- How current behavior differs from future plans
+- Integration with error handling (Milestone 7+)
+
+```bash
+cargo run -- run examples/milestone3/exit_code_future.ryo
+# [Result] => 0
+```
+
+**Note:** This file is primarily documentation. Read the comments to see how explicit exit codes will work in future milestones.
 
 ## Compilation Pipeline
 
@@ -116,8 +136,10 @@ Program (0..6)
 [Codegen]
 Generated object file: simple.o
 Linked with zig cc: simple
-[Result] => 42
+[Result] => 0
 ```
+
+**Note:** The expression `x = 42` evaluates to 42 (stored in Cranelift SSA register), but the program exits with 0 (success convention).
 
 ### View AST Only
 ```bash
@@ -160,8 +182,9 @@ cargo run -- ir examples/milestone3/simple.ryo
 
 - Generated object files (`.o` or `.obj`) are written to the current directory
 - Generated executables are also in the current directory
-- Exit codes are in the range 0-255 (Unix) or 0-2147483647 (some systems)
-- Negative numbers wrap to unsigned range (e.g., -1 becomes 255 on Unix)
+- **All programs exit with code 0 (success)** - this is the Unix convention for successful program execution
+- Explicit exit codes will be added in Milestone 4 via return statements: `fn main() -> int: return 1`
+- Expressions are evaluated correctly (e.g., `2 + 3 * 4 = 14`) but the result doesn't affect the exit code
 
 ## What's Not Implemented Yet
 

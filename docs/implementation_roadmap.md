@@ -136,9 +136,12 @@ This roadmap outlines the planned development of the Ryo programming language co
 
 **Design Decisions:**
 - AOT only (JIT not implemented, deferred to future milestone for REPL)
-- All exit codes return as compiled program return value (note: Unix 8-bit wrapping for negative numbers)
+- **Exit codes:** All programs exit with 0 (success) by default - explicit returns coming in Milestone 4
 - Object file and executable remain in current directory after execution
 - `ryo ir` command provides IR generation confirmation (full IR display requires deeper Cranelift integration)
+
+**Design Change (2025-01-10):**
+Exit code behavior changed from "last expression value" to "implicit 0 (success)". This aligns with industry standards (Rust, Go, Python, C) and prepares for Milestone 4's return statements. See `docs/design_issues.md` for detailed rationale. Previous behavior was confusing and incompatible with future features.
 
 **What's NOT Implemented (Deferred):**
 - ❌ JIT compilation (for REPL)

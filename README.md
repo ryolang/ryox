@@ -29,7 +29,7 @@ The Ryo compiler currently implements **Milestone 3: AOT Compilation** with the 
 - **Arithmetic Operations**: Integer literals, binary operators (`+`, `-`, `*`, `/`), unary negation
 - **Expressions**: Parenthesized expressions with correct operator precedence
 - **Variable Declarations**: With optional type annotations and `mut` keyword
-- **Exit Codes**: Programs return the last expression's value as exit code
+- **Exit Codes**: All programs exit with 0 (success) - explicit returns coming in Milestone 4
 - **Cross-Platform**: Generates native executables for x86_64, aarch64 (Apple Silicon), and more
 
 **Working Example (Compiles Today):**
@@ -37,13 +37,14 @@ The Ryo compiler currently implements **Milestone 3: AOT Compilation** with the 
 ```ryo
 # arithmetic.ryo - A working Milestone 3 program
 
-x = 2 + 3 * 4      # Result: 14 (operator precedence: multiply first)
+x = 2 + 3 * 4      # Computes 14 (operator precedence: multiply first)
+                    # Program exits with 0 (success)
 ```
 
 ```bash
 # Compile and run
 cargo run -- run arithmetic.ryo
-# Output: [Result] => 14
+# Output: [Result] => 0
 ```
 
 **Test Coverage:** 79 passing tests (32 lexer + 32 parser + 15 codegen integration tests)
@@ -160,14 +161,14 @@ y: int = 10
 # Arithmetic expressions with correct precedence
 result = x + y * 2    # 42 + (10 * 2) = 62
 
-# Multiple statements - last value is exit code
-final = result - 20   # 62 - 20 = 42
+# Multiple statements - all evaluated, program exits with 0
+final = result - 20   # 62 - 20 = 42 (computed, but exit code is 0)
 ```
 
 ```bash
 # Compile and run
 cargo run -- run arithmetic.ryo
-# Output: [Result] => 42
+# Output: [Result] => 0
 
 # Or see the compilation stages
 cargo run -- lex arithmetic.ryo    # View tokens
@@ -234,7 +235,7 @@ Program (0..6)
 [Codegen]
 Generated object file: first.o
 Linked with zig cc: first
-[Result] => 42
+[Result] => 0
 ```
 
 **Next Steps:**
@@ -254,7 +255,7 @@ echo "result = 2 + 3 * 4" > calc.ryo
 
 # Compile and run
 cargo run -- run calc.ryo
-# Output: [Result] => 14
+# Output: [Result] => 0
 
 # Inspect compilation stages
 cargo run -- lex calc.ryo     # See tokens

@@ -161,9 +161,10 @@ fn test_run_simple_integer_exit_code() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Verify output shows successful compilation
+    // All programs exit with 0 (success) in Milestone 3
     assert!(
-        stdout.contains("[Result] => 42"),
-        "Output should show exit code 42, got: {}",
+        stdout.contains("[Result] => 0"),
+        "Output should show exit code 0, got: {}",
         stdout
     );
 
@@ -201,10 +202,10 @@ fn test_run_arithmetic_expression_exit_code() {
     assert!(output.status.success(), "ryo run should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // 2 + 3 * 4 = 2 + 12 = 14 (correct precedence)
+    // 2 + 3 * 4 = 2 + 12 = 14 (correct precedence), but exit code is 0
     assert!(
-        stdout.contains("[Result] => 14"),
-        "Should evaluate 2 + 3 * 4 as 14, got: {}",
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0, got: {}",
         stdout
     );
 }
@@ -221,10 +222,10 @@ fn test_run_multiple_statements_last_value() {
     assert!(output.status.success(), "ryo run should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Should return the last statement's value (30)
+    // All programs exit with 0 (success)
     assert!(
-        stdout.contains("[Result] => 30"),
-        "Multiple statements should return last value"
+        stdout.contains("[Result] => 0"),
+        "Multiple statements should exit with 0"
     );
 }
 
@@ -240,8 +241,8 @@ fn test_run_division_by_constant() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("[Result] => 50"),
-        "Should evaluate 100 / 2 as 50"
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0"
     );
 }
 
@@ -257,8 +258,8 @@ fn test_run_subtraction() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("[Result] => 70"),
-        "Should evaluate 100 - 30 as 70"
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0"
     );
 }
 
@@ -273,10 +274,10 @@ fn test_run_parenthesized_expression() {
     assert!(output.status.success(), "ryo run should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // (10 + 5) * 2 = 15 * 2 = 30
+    // (10 + 5) * 2 = 15 * 2 = 30 (computed), but exit code is 0
     assert!(
-        stdout.contains("[Result] => 30"),
-        "Should evaluate (10 + 5) * 2 as 30"
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0"
     );
 }
 
@@ -292,8 +293,8 @@ fn test_run_with_type_annotation() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("[Result] => 99"),
-        "Should correctly compile typed variable"
+        stdout.contains("[Result] => 0"),
+        "Should correctly compile typed variable and exit with 0"
     );
 }
 
@@ -309,8 +310,8 @@ fn test_run_mutable_variable() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("[Result] => 55"),
-        "Should correctly compile mutable variable"
+        stdout.contains("[Result] => 0"),
+        "Should correctly compile mutable variable and exit with 0"
     );
 }
 
@@ -325,10 +326,9 @@ fn test_run_negation_operator() {
     assert!(output.status.success(), "ryo run should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Note: Unix exit codes are 0-255, so -42 wraps to 214 (as unsigned byte: -42 & 0xFF = 214)
-    // The output shows the actual exit code value that will be returned
+    // All programs exit with 0 (success)
     assert!(
-        stdout.contains("[Result] => 214"),
-        "Should evaluate negation and wrap to unsigned byte (214)"
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0"
     );
 }

@@ -71,7 +71,7 @@ Program (24..30)
 [Codegen]
 Generated object file: first.o
 Linked with zig cc: first
-[Result] => 42
+[Result] => 0
 ```
 
 **What just happened?**
@@ -81,7 +81,7 @@ Linked with zig cc: first
 3. **[Codegen]** - Compilation to native code:
    - Created `first.o` (object file)
    - Linked to create `first` executable
-4. **[Result] => 42** - The exit code (explained below)
+4. **[Result] => 0** - The exit code (all Milestone 3 programs exit with 0)
 
 ### Step 4: Verify the Executable
 
@@ -99,51 +99,48 @@ You can run the executable directly:
 ./first        # Unix/macOS
 first.exe      # Windows
 
-echo $?        # Check exit code (Unix/macOS)
-echo %ERRORLEVEL%  # Check exit code (Windows)
+echo $?        # Check exit code (Unix/macOS) - will show 0
+echo %ERRORLEVEL%  # Check exit code (Windows) - will show 0
 ```
 
-The exit code will be 42!
+The exit code will be 0 (success)!
 
 ## Understanding Exit Codes
 
-In Ryo (currently), **programs return the value of the last expression as an exit code**.
+In Ryo Milestone 3, **all programs exit with code 0 (success)**. This follows the Unix convention where 0 indicates successful execution.
 
 ```ryo
-x = 42    # Program returns 42
+x = 42    # Evaluates to 42, but program exits with 0
 ```
 
-### Exit Code Conventions
+### Current Behavior (Milestone 3)
 
-- **0** = Success (by convention)
-- **1-255** = Error or custom codes
-- Other values wrap on some platforms
+All programs exit with code 0, regardless of expression values. This is the Unix convention for successful program execution.
+
+**Why 0?**
+- By convention, exit code 0 means "success" on Unix/Linux/macOS
+- Non-zero exit codes indicate errors or specific conditions
+- This aligns with how other languages (Rust, Python, Go) handle default exit codes
 
 ### Examples
 
 ```ryo
-# Returns 0 (success)
-result = 0
+# All of these exit with 0 (success)
+x = 42           # Exits with 0
+result = 0       # Exits with 0
+answer = 2 + 3 * 4  # Computes 14, exits with 0
 ```
 
-```ryo
-# Returns 1 (generic error)
-status = 1
-```
+### Future: Explicit Exit Codes (Milestone 4+)
+
+In future milestones, you'll be able to explicitly control exit codes:
 
 ```ryo
-# Returns 14 (arithmetic result)
-answer = 2 + 3 * 4
-```
-
-### Platform Note: Unix Exit Code Wrapping
-
-On Unix/macOS, exit codes are 8-bit unsigned (0-255). Negative numbers wrap:
-
-```ryo
-x = -1     # Returns 255 on Unix (wraps around)
-x = -42    # Returns 214 on Unix (256 - 42)
-x = 256    # Returns 0 on Unix (wraps to 0)
+# Planned for Milestone 4 (NOT YET IMPLEMENTED)
+fn main() -> int:
+    if check_error():
+        return 1    # Error
+    return 0        # Success
 ```
 
 ## Try More Examples
@@ -154,21 +151,21 @@ Now try the official examples in `examples/milestone3/`:
 
 ```bash
 cargo run -- run examples/milestone3/arithmetic.ryo
-# Result: 14  (because 2 + 3 * 4 = 2 + 12 = 14)
+# Result: 0  (computes 2 + 3 * 4 = 14, but exits with 0)
 ```
 
 ### Parentheses Change Precedence
 
 ```bash
 cargo run -- run examples/milestone3/parenthesized.ryo
-# Result: 30  (because (10 + 5) * 2 = 15 * 2 = 30)
+# Result: 0  (computes (10 + 5) * 2 = 30, but exits with 0)
 ```
 
 ### Multiple Statements
 
 ```bash
 cargo run -- run examples/milestone3/multiple.ryo
-# Result: 30  (returns last value: z = 30)
+# Result: 0  (evaluates all statements, exits with 0)
 ```
 
 ## What's Happening Under the Hood?
