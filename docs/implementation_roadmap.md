@@ -1447,7 +1447,7 @@ Test result: ok. 2 passed; 0 failed
 - Dependencies: Milestone 24 (assert functions)
 
 ### Milestone 26: Core Language Complete & v1.0 Prep
-**Goal:** Finalize core language, polish, and prepare for v1.0 release
+**Goal:** Finalize core language, polish, and prepare for v0.1.0 release
 
 **Tasks:**
 - **Integration & Polish:**
