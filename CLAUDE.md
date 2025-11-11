@@ -554,6 +554,99 @@ fn example():
 		do_something()
 ```
 
+#### Modules and Imports
+
+Ryo uses a directory-based module system:
+
+**Key Concepts**:
+- **Package**: Entire project defined by `ryo.toml` (compilation/distribution unit)
+- **Module**: Directory containing `.ryo` files (organizational unit)
+- **Directory = Module**: All `.ryo` files in a directory form a single module
+- **Implicit Discovery**: No `mod` keyword needed, filesystem structure defines modules
+
+**Access Levels** (3 levels for simplicity):
+```ryo
+# Public - accessible from any module
+pub fn public_api():
+	pass
+
+# Package-internal - accessible within same ryo.toml package
+package fn internal_helper():
+	pass
+
+# Module-private (no keyword) - accessible only within same module
+fn _implementation_detail():
+	pass
+```
+
+**Import Syntax**:
+```ryo
+# Import single module
+import math
+
+# Import nested module
+import utils.strings
+
+# Use imported items
+math.add(5, 3)
+utils.strings.format("Hello")
+```
+
+**Multi-File Modules**:
+```ryo
+# Directory structure:
+# server/
+#   ├── http.ryo
+#   ├── routes.ryo
+#   └── middleware.ryo
+
+# All files in server/ are part of the "server" module
+# Files can call each other's module-private functions
+```
+
+**Hierarchical Modules**:
+```ryo
+# Directory structure:
+# utils/
+#   ├── core.ryo          # Part of "utils" module
+#   └── math/             # Child module "utils.math"
+#       └── operations.ryo
+
+# Import parent module
+import utils
+
+# Import child module
+import utils.math
+```
+
+**Circular Dependencies**: Forbidden between modules, allowed within modules
+```ryo
+# ❌ FORBIDDEN: user imports post, post imports user (circular)
+# ✓ SOLUTION: Extract common types, use ID references instead of objects
+
+# Example solution:
+# models/ids.ryo - common types
+pub struct UserID(int)
+pub struct PostID(int)
+
+# user/user.ryo
+import models.ids
+struct User:
+	id: ids.UserID
+	post_ids: List[ids.PostID]  # Store IDs, not Post objects
+
+# post/post.ryo
+import models.ids
+struct Post:
+	id: ids.PostID
+	author_id: ids.UserID  # Store ID, not User object
+```
+
+**See Also**:
+- `docs/specification.md` Section 11 - Complete module system specification
+- `docs/getting_started.md` Section 3 - Module tutorial
+- `docs/examples/modules/` - Practical examples
+
 ---
 
 ## Development Workflow
@@ -769,6 +862,69 @@ z = x + y  # Error: cannot add int and float
 - **vs. Hindley-Milner**: Simpler implementation, better errors, but less "magic"
 - **vs. No inference**: Much more ergonomic, less boilerplate
 - **vs. Python**: Static type safety with similar ergonomics
+
+### 8. Module System Design
+
+**Decision**: Directory-based modules with three access levels
+- **Directory = Module**: All `.ryo` files in a directory form one module
+- **Package = ryo.toml**: Package is the compilation/distribution boundary
+- **Three Access Levels**: `pub` (public), `package` (package-internal), module-private (no keyword)
+- **Implicit Discovery**: Filesystem structure defines modules (no `mod` declarations)
+- **Hierarchical Structure**: Parent modules can contain child submodules
+- **Circular Dependencies**: Forbidden between modules, allowed within modules
+
+**Rationale**:
+- **Simpler than Rust**: No `mod` declarations, no file vs module confusion
+- **More powerful than Go**: Three access levels vs Go's two, explicit package boundaries
+- **Familiar to Python/Go developers**: Directory-based structure
+- **Validated by Swift 6**: Swift added `package` keyword in March 2025, proving the three-level model
+
+**Examples**:
+```ryo
+# Project structure
+myproject/
+├── ryo.toml              # Package boundary
+└── src/
+    ├── main.ryo          # Module "main"
+    ├── utils/            # Module "utils"
+    │   ├── core.ryo
+    │   └── math/         # Module "utils.math"
+    │       └── ops.ryo
+    └── server/           # Module "server" (multi-file)
+        ├── http.ryo
+        └── routes.ryo
+
+# Access levels in utils/core.ryo
+pub fn public_api():           # External users can call
+    package_configure()
+
+package fn package_configure(): # Only this package can call
+    _internal_setup()
+
+fn _internal_setup():          # Only utils module can call
+    pass
+```
+
+**Comparison to other languages**:
+
+| Language | Module Unit | Access Levels | Discovery | Circular Deps |
+|----------|-------------|---------------|-----------|---------------|
+| **Ryo** | Directory | 3 (pub, package, private) | Implicit | Forbidden |
+| Rust | File | 4 (pub, pub(crate), pub(super), private) | Explicit (`mod`) | Forbidden |
+| Go | Directory | 2 (Exported, unexported) | Implicit | Forbidden |
+| Python | Directory | 1 (convention-based) | Implicit | Allowed |
+| Zig | Build-defined | 2 (pub, private) | Explicit | Forbidden |
+| Swift 6 | Target | 6 (open, public, package, internal, fileprivate, private) | Explicit | Allowed |
+
+**Status**: ✅ Designed (2025-11-11)
+
+**Implementation Roadmap**: See Milestone 5 in `docs/implementation_roadmap.md`
+
+**See Also**:
+- `docs/specification.md` Section 11 - Complete specification
+- `docs/design_issues.md` - Design rationale and trade-offs
+- `docs/proposals.md` - Future enhancements (re-exports, workspaces)
+- `docs/examples/modules/` - Practical examples
 
 ---
 
@@ -1144,6 +1300,13 @@ cargo test --test integration_tests
 
 ## Version History
 
+- **2025-11-11**: Module system documentation
+  - Added comprehensive module system design to Key Design Decisions (Section 7.8)
+  - Added Modules and Imports subsection to Syntax Conventions
+  - Created 6 practical examples in docs/examples/modules/
+  - Updated specification, proposals, design_issues, and getting_started docs
+  - Formalized package vs module terminology
+
 - **2025-11-05**: Documentation syntax standardization
   - Replaced C-style braces with Python-style colons across all docs
   - Updated README.md, docs/specification.md, docs/proposals.md, docs/design_issues.md
@@ -1223,4 +1386,4 @@ The planned multi-crate workspace structure includes:
 
 **This document is living documentation. Update it as the project evolves.**
 
-Last major update: 2025-11-05 - Documentation syntax standardization
+Last major update: 2025-11-11 - Module system documentation and examples

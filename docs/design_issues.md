@@ -79,6 +79,336 @@ fn main() -> (app.ConfigError | app.ConnectionFailed)!():
 
 ---
 
+### Module System Design ✅ RESOLVED (2025-01-11)
+
+**Issue:** How should Ryo organize code into modules and packages? What visibility levels are needed?
+
+**Decision:** Directory = Module, Three Access Levels, Hierarchical Structure, Package = ryo.toml project
+
+#### **1. Directory = Module (vs File = Module)**
+
+**Choice:** One directory = one module (all .ryo files in directory share namespace)
+
+**Rationale:**
+- **Go's Proven Model:** Go has used directory = package successfully for 15+ years
+- **Simplicity:** No `mod` keyword declarations needed (implicit discovery)
+- **Multi-File Modules:** Large modules can span multiple files naturally
+- **Python Familiarity:** Similar to Python's package directories
+- **Avoids Rust Confusion:** No `mod.rs` vs `file.rs` ambiguity (deprecated in Rust 2018)
+
+**Comparison:**
+| Approach | Languages | Pros | Cons | Ryo Choice |
+|----------|-----------|------|------|------------|
+| File = Module | Rust | Fine-grained control | Requires `mod` declarations, boilerplate | ❌ |
+| Directory = Module | Go, Python | Simple, implicit | Less granular | ✅ |
+| Build-defined | Zig | Explicit, no magic | Verbose, two-step process | ❌ |
+
+**Trade-off Accepted:**
+- Less granular than Rust's file = module
+- Cannot have multiple small modules in same directory
+- Accepted for simplicity and Python/Go developer familiarity
+
+---
+
+#### **2. Three Access Levels (vs 2, 4, or 6)**
+
+**Choice:** `pub`, `package`, module-private (no keyword)
+
+**Rationale:**
+
+**Why NOT 2 levels (like Go/Zig)?**
+- Go's limitation: Only Exported (capitalized) vs unexported (lowercase)
+- Go developers create awkward `internal/` directory workarounds
+- Cannot share code between modules without making it public
+- Real pain point: 50+ upvoted Stack Overflow questions about this
+
+**Why NOT 4+ levels (like Rust/Swift)?**
+- Rust has 4: `pub`, `pub(crate)`, `pub(super)`, private
+- Swift 6 has 6: `open`, `public`, `package`, `internal`, `fileprivate`, `private`
+- Too complex for target audience (Python/Go developers)
+- Diminishing returns: `pub(super)` and `fileprivate` rarely used
+
+**Why 3 is the Sweet Spot:**
+- **Historical Validation:** Java has 4 levels (public, protected, package, private)
+  - But no inheritance in Ryo, so 3 levels sufficient
+- **Swift 6 Validation:** Apple added `package` keyword in March 2025
+  - Proves industry need for package-internal visibility
+  - Validates our design before implementation!
+- **Real-World Use Cases:**
+  1. `pub` - Library public API (web framework, database driver)
+  2. `package` - Internal shared code (config loader, logger, utils)
+  3. Module-private - Implementation details (helpers, validation)
+
+**Comparison Table:**
+
+| Language | Levels | Public | Package/Crate | Module | File | Ryo Verdict |
+|----------|--------|--------|---------------|--------|------|-------------|
+| **Go** | 2 | Capitalized | `internal/` | lowercase | - | Too limiting |
+| **Zig** | 2 | `pub` | - | private | - | Too limiting |
+| **Rust** | 4 | `pub` | `pub(crate)` | `pub(super)` + private | - | Too complex |
+| **Swift 6** | 6 | `public`/`open` | `package` | `internal` | `fileprivate` + `private` | Too complex |
+| **Ryo** | 3 | `pub` | `package` | private | - | ✅ Just right |
+
+**Why `package` instead of `pub(crate)`:**
+- Ryo doesn't have "crates" (that's Rust terminology)
+- Ryo has "packages" (defined by ryo.toml)
+- `package` more intuitive for non-Rust developers
+- Aligns with Swift 6's 2025 addition
+
+**Trade-off Accepted:**
+- No `pub(super)` for parent-only visibility (deferred to proposals)
+- No file-level privacy (deferred, may never implement)
+- Simpler mental model prioritized over maximum flexibility
+
+---
+
+#### **3. Hierarchical Modules (vs Flat Packages)**
+
+**Choice:** Modules can contain submodules (`utils.math.geometry`)
+
+**Rationale:**
+
+**Go's Limitation: Flat Packages**
+```go
+// These are completely unrelated packages:
+import "net"
+import "net/http"  // No relationship to "net"!
+```
+
+Problems:
+- No true namespaces
+- Verbose import paths (`github.com/org/project/internal/database/postgres/connection`)
+- Refactoring pain (moving packages breaks all imports)
+- Forces awkward organization at scale
+
+**Rust's Solution: Hierarchical Modules**
+```rust
+mod utils {
+    pub mod math {
+        pub mod geometry { }
+    }
+}
+// utils contains math, math contains geometry
+```
+
+Benefits:
+- Clear parent-child relationships
+- Natural organization
+- Can re-export from children
+
+**Ryo's Approach: Directory-Based Hierarchy**
+```
+src/
+  utils/           # Module "utils"
+    core.ryo       # Part of utils
+    math/          # Module "utils.math" (child of utils)
+      basic.ryo    # Part of utils.math
+```
+
+**Key Design Decisions:**
+1. **Parent can have files AND subdirectories** (unlike Go's file-only)
+2. **Child is separate namespace** (not automatic visibility of parent private items)
+3. **Must import parent explicitly** (no implicit `super::` like Rust)
+
+**Why this design:**
+- **Flexibility:** Like Rust's hierarchy
+- **Simplicity:** Like Go's implicit discovery
+- **Clean Separation:** Child doesn't pollute parent namespace
+- **Explicit Imports:** No magic, clear dependencies
+
+**Comparison:**
+| Feature | Go | Rust | Python | Ryo |
+|---------|----|----|--------|-----|
+| Hierarchical? | ❌ Flat | ✅ Tree | ✅ Tree | ✅ Tree |
+| Files + subdirs? | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
+| Child sees parent? | N/A | ✅ Implicit | ✅ Implicit | ❌ Must import |
+| Discovery | Implicit | Explicit (`mod`) | Implicit (`__init__.py`) | Implicit (directory) |
+
+**Trade-off Accepted:**
+- Child must import parent explicitly (more verbose than Rust/Python)
+- But clearer dependencies and no implicit access
+
+---
+
+#### **4. No Circular Dependencies Between Modules**
+
+**Choice:** Forbid circular dependencies between modules (compile error)
+
+**Rationale:**
+
+**Go's Experience: Forbidden and Beneficial**
+- Circular deps **always** indicate poor architecture
+- Forces clearer design and better abstraction
+- Makes compilation deterministic
+- 10+ years of Go development proves this works
+
+**The Classic Problem: User ↔ Post**
+```ryo
+# user/user.ryo
+import post
+struct User:
+    posts: List[post.Post]
+
+# post/post.ryo
+import user
+struct Post:
+    author: user.User
+
+# ✗ ERROR: Circular dependency!
+```
+
+**Standard Solutions (all acceptable):**
+
+**Solution 1: Extract Common Types**
+```ryo
+# types/ids.ryo
+struct UserID(int)
+struct PostID(int)
+
+# user/user.ryo
+import types.ids
+struct User:
+    posts: List[ids.PostID]  # Just IDs
+
+# post/post.ryo
+import types.ids
+struct Post:
+    author_id: ids.UserID  # Just ID
+```
+
+**Solution 2: Merge Modules**
+```ryo
+# domain/models.ryo
+struct User: ...
+struct Post:
+    author: User  # ✓ Same module
+```
+
+**Solution 3: Interface Abstraction**
+```ryo
+# interfaces/author.ryo
+trait Author:
+    fn get_id() -> int
+
+# post/post.ryo
+import interfaces
+struct Post:
+    author: interfaces.Author  # Interface, not concrete type
+```
+
+**Why Allow Within Module:**
+```ryo
+# server/http.ryo
+fn start():
+    routes.register()  # ✓ OK
+
+# server/routes.ryo
+fn register():
+    http.start()  # ✓ OK - same module (server)
+```
+
+Files in same directory collaborate freely.
+
+**Comparison:**
+| Language | Between Packages/Crates | Within Module/Package | Ryo Choice |
+|----------|------------------------|----------------------|------------|
+| **Go** | ❌ Forbidden | ✓ Allowed | ✅ Same |
+| **Rust** | ❌ Between crates | ✓ Within crate | ✅ Similar |
+| **Python** | ✓ Allowed (runtime error) | ✓ Allowed | ❌ Too permissive |
+| **Zig** | ✓ Allowed | ✓ Allowed | ❌ Too permissive |
+
+**Rationale:**
+- **Architecture Quality:** Forces good design (proven by Go)
+- **Compilation Speed:** Deterministic order enables parallelization
+- **Clear Dependencies:** No spaghetti code
+- **Within Module Flexibility:** Files collaborate without barriers
+
+**Trade-off Accepted:**
+- Sometimes requires refactoring (extract types, merge modules)
+- But results in better architecture
+
+---
+
+#### **5. Implicit Module Discovery (vs Explicit Declaration)**
+
+**Choice:** No `mod` keyword needed, directories auto-discovered
+
+**Rationale:**
+
+**Rust's Verbosity:**
+```rust
+// Must explicitly declare every submodule
+mod server;   // Loads server.rs or server/mod.rs
+mod database; // Loads database.rs or database/mod.rs
+```
+
+**Zig's Build System Requirement:**
+```zig
+// build.zig
+const server = b.addModule("server", .{
+    .root_source_file = .{ .path = "src/server.zig" }
+});
+```
+
+**Ryo/Go/Python Simplicity:**
+```
+src/
+  server/     # Automatically a module, no declaration needed
+  database/   # Automatically a module, no declaration needed
+```
+
+**Benefits:**
+- **Less Boilerplate:** No per-module declarations
+- **Obvious from File Structure:** Directory layout is module layout
+- **Faster Iteration:** Just create directory and start coding
+- **Familiar:** Python and Go developers expect this
+
+**Trade-offs:**
+- **Less Explicit:** Can't selectively expose/hide submodules (deferred to `pub use` proposal)
+- **No Renaming:** Module name = directory name (but can alias on import)
+- **All-or-Nothing:** All .ryo files in directory are part of module
+
+**Comparison:**
+| Language | Discovery | Flexibility | Boilerplate | Ryo Choice |
+|----------|-----------|-------------|-------------|------------|
+| **Rust** | Explicit `mod` | High (can hide) | High | ❌ |
+| **Go** | Implicit (dir) | Low (all visible) | None | ✅ |
+| **Zig** | Build system | High (can rename) | Very high | ❌ |
+| **Python** | Implicit (`__init__.py`) | Medium | Low | ✅ Similar |
+
+**Rationale:** Python/Go developers are the target audience. They expect implicit discovery.
+
+---
+
+#### **Summary of Decisions**
+
+| Aspect | Choice | Alternative Considered | Why Rejected |
+|--------|--------|----------------------|--------------|
+| **Module Unit** | Directory | File (Rust) | Too much boilerplate |
+| **Access Levels** | 3 (pub, package, private) | 2 (Go/Zig) | Too limiting |
+| | | 4+ (Rust/Swift) | Too complex |
+| **Hierarchy** | Tree (parent contains child) | Flat (Go) | Poor organization at scale |
+| **Circular Deps** | Forbidden between modules | Allowed (Python) | Spaghetti code |
+| **Discovery** | Implicit (directory) | Explicit (Rust/Zig) | Too verbose |
+| **Package Term** | `package` keyword | `pub(crate)` (Rust) | Ryo doesn't have crates |
+
+**Validation:**
+- **Swift 6 (March 2025):** Added `package` keyword - validates our design!
+- **Go (15+ years):** Directory = package works at massive scale
+- **Rust (2018 edition):** Deprecated `mod.rs` for simpler file structure
+
+**Implementation Timeline:**
+- Specification: ✅ Complete (2025-01-11)
+- Implementation: Milestone 5 (Basic imports), Milestone 6 (Access checking)
+
+**References:**
+- Research: Go, Rust, Zig, Swift 6, Python module systems (2025-01-11)
+- Swift 6 package keyword: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0386-package-access-modifier.md
+- Go package system analysis: Stack Overflow top issues, HN discussions
+- Rust module system evolution: RFC 2126, 2018 edition changes
+
+---
+
 ## Critical Issues Requiring Immediate Resolution
 
 ### 1. Tuple Syntax Ambiguity 🔴
