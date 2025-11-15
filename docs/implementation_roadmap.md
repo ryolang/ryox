@@ -16,7 +16,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 | Milestone 4: Functions & Calls | ⏳ Planned | Define and call functions with arguments and return values. |
 | Milestone 5: Module System (Design) | ✅ **COMPLETE** | Directory-based modules with three access levels designed and documented. |
 | Milestone 6: Expressions & Operators | ⏳ Planned | Arithmetic, comparison, logical operators. Float type. |
-| Milestone 6: Control Flow & Booleans | ⏳ Planned | if/else, while loops, break/continue, boolean logic. |
+| Milestone 6.5: Control Flow & Booleans | ⏳ Planned | if/else, while loops, break/continue, boolean logic. |
 | Milestone 7: Structs | ⏳ Planned | User-defined composite types with named fields. |
 | Milestone 8: Enums (ADTs) | ⏳ Planned | Algebraic data types with variants. |
 | Milestone 9: Pattern Matching | ⏳ Planned | Match expressions with exhaustiveness checking. |
@@ -506,7 +506,7 @@ remainder = a % b     # 1
 - Type errors are clear and localized (bidirectional type checking)
 - Dependencies: Milestone 4 (functions for testing)
 
-### Milestone 6: Control Flow & Booleans
+### Milestone 6.5: Control Flow & Booleans
 **Goal:** Implement `if/else` statements, `for` loops, and boolean logic
 
 **Tasks:**
