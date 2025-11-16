@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expression, ExprKind, Literal, Program, UnaryOperator};
+use crate::ast::{BinaryOperator, ExprKind, Expression, Literal, Program, UnaryOperator};
 
 /// Evaluate a program by evaluating all statements and returning the value
 /// of the last initializer expression.

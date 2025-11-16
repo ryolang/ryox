@@ -2,132 +2,11 @@
 
 This document outlines planned language extensions and experimental features for the Ryo programming language. These proposals are not part of the current specification but are under consideration for future versions.
 
-## Concurrency Extensions: CSP (Communicating Sequential Processes)
-
-While Ryo's primary concurrency model is async/await, we plan to add optional CSP-style concurrency primitives for specialized use cases.
-
-### **CSP Model Overview**
-
-**Model:** Communicating Sequential Processes via channels. Encourages avoiding shared memory in favor of message passing.
-
-**Planned Primitives:**
-*   `spawn`: Creates lightweight concurrent task.
-*   `chan[T]`: Typed channel. Sending moves ownership. Default **unbuffered**; `chan[T](size)` for buffered. `close(chan)` function. Receive on closed yields `none` after buffer empty. Send on closed panics.
-*   `select`: Waits on multiple channel operations. `_:` case for non-blocking default.
-
-### **CSP Syntax Examples**
-
-```ryo
-# Basic channel operations
-ch = chan[int]()  # Unbuffered channel
-buffered_ch = chan[string](10)  # Buffered channel with capacity 10
-
-# Spawning tasks
-spawn producer(ch)
-spawn consumer(ch)
-
-# Channel operations
-ch <- 42          # Send value (blocks if unbuffered and no receiver)
-value = <- ch     # Receive value (blocks until available)
-
-# Select statement for multiplexing
-select:
-    <- ch1: 
-        handle_ch1_data()
-    ch2 <- send_val: 
-        print("Sent data")
-    _:  # Optional non-blocking case
-        do_something_else()
-```
-
-### **Integration with Async/Await**
-
-CSP primitives will be designed to work alongside async/await:
-
-```ryo
-# Channels that work with async code
-async fn async_producer(ch: chan[Data]):
-    for i in range(10):
-        data = await expensive_computation(i)
-        ch <- data  # Send computed data
-    close(ch)
-
-# Async iteration over channels
-async fn async_consumer(ch: chan[Data]):
-    async for data in ch:  # Async iterator over channel
-        await process_data(data)
-
-# Mixing paradigms
-async fn hybrid_example():
-    (tx, rx) = chan.unbounded[Task]()
-
-    # Spawn CSP-style workers
-    spawn worker(rx)
-
-    # Use async for I/O
-    tasks = await load_tasks_from_db()
-
-    # Send via channels
-    for task in tasks:
-        tx <- task
-```
-
-### **Use Cases for CSP Extensions**
-
-**When to use CSP instead of async/await:**
-
-1. **Actor Systems**: When you need isolated, message-passing actors
-2. **Producer/Consumer Pipelines**: Data processing pipelines with backpressure
-3. **Event Streaming**: Real-time event processing systems
-4. **System Components**: Low-level system programming where message passing is clearer than async/await
-
-**Example: Data Processing Pipeline**
-```ryo
-async fn data_pipeline():
-    # Create pipeline stages
-    (raw_input, raw_output) = chan.unbounded[RawData]()
-    (processed_input, processed_output) = chan.unbounded[ProcessedData]()
-    (final_input, final_output) = chan.unbounded[FinalData]()
-
-    # Spawn processing stages
-    spawn raw_processor(raw_output, processed_input)
-    spawn data_enricher(processed_output, final_input)
-    spawn final_consumer(final_output)
-
-    # Feed data into pipeline (async source)
-    async for raw_data in data_source():
-        raw_input <- raw_data
-```
-
-### **Implementation Timeline**
-
-**Status:** CSP is a planned future extension. The design is detailed in this document, but implementation phases have not yet been scheduled. Async/await remains the primary concurrency model for near-term releases.
-
-- **Phase 1**: Core async/await implementation (current focus)
-- **Phase 2**: Basic channel types and operations (planned, not scheduled)
-- **Phase 3**: Select statement and advanced channel features (planned, not scheduled)
-- **Phase 4**: Integration with async runtime and optimization (planned, not scheduled)
-
-### **Rationale**
-
-CSP provides benefits that complement async/await:
-- **Clear ownership transfer**: Channels with move semantics prevent data races
-- **Backpressure handling**: Bounded channels provide natural flow control
-- **Composable concurrency**: Easy to build complex concurrent systems from simple primitives
-- **Familiar patterns**: Developers from Go background will find this natural
-
-However, async/await remains the primary model because:
-- **Python developer familiarity**: More approachable for the target audience
-- **Ecosystem compatibility**: Better integration with existing async libraries
-- **I/O optimization**: Better suited for typical web/API applications
-
----
-
 ## Additional Language Proposals
 
 ### **Advanced Generics**
 
-Currently, Ryo uses built-in generic types like `List[T]`, `Map[K,V]`, and collection types. Error types use the `error` keyword and optional types use `?T`. User-defined generics are planned for future implementation.
+Currently, Ryo uses built-in generic types like `list[T]`, `map[K,V]`, and collection types. Error types use the `error` keyword and optional types use `?T`. User-defined generics are planned for future implementation.
 
 #### **Generic Type Definitions**
 
@@ -188,7 +67,7 @@ result = try some_operation() catch |e|:
 **Basic Trait Bounds**
 ```ryo
 # Future syntax for trait bounds
-fn sort[T](list: &mut List[T])
+fn sort[T](list: &mut list[T])
 where T: Comparable {
     # Implementation using T's comparison capabilities
 }
@@ -256,7 +135,7 @@ trait Collection:
     fn iter(&self) -> Self.Iter
 
 # Implementation for List
-impl[T] Collection for List[T]:
+impl[T] Collection for list[T]:
     type Item = T
     type Iter = ListIterator[T]
 
@@ -295,7 +174,7 @@ where T: Clone:
 ```ryo
 # Future type inference capabilities
 list = List.new()  # Type inferred from usage
-list.push(42)      # List[int] inferred
+list.push(42)      # list[int] inferred
 
 result = identity(42)      # identity[int] inferred
 pair = Pair.new("a", 1)    # Pair[str, int] inferred
@@ -317,7 +196,7 @@ pair = Pair.new("a", 1)    # Pair[str, int] inferred
 
 **No Higher-Kinded Types**
 - Generic types cannot be parameterized by other generics initially
-- `Container[List]` not supported, only `Container[List[int]]`
+- `Container[List]` not supported, only `Container[list[int]]`
 - Keeps type system complexity manageable
 
 **Coherence Rules**
@@ -377,7 +256,7 @@ trait IntoIterator:
     
     fn into_iter(self) -> Self.IntoIter
 
-impl IntoIterator for List[T]:
+impl IntoIterator for list[T]:
     type Item = T
     type IntoIter = ListIterator[T]
     
@@ -389,7 +268,7 @@ numbers = [1, 2, 3, 4, 5]
 doubled = numbers.iter()
     .map(fn(x): x * 2)
     .filter(fn(x): x > 5)
-    .collect[List[int]]()
+    .collect[list[int]]()
 ```
 
 #### **Lazy Evaluation**
@@ -401,7 +280,7 @@ result = data.iter()
     .filter(is_valid)           # Only processes when consumed
     .map(transform)             # Lazy transformation
     .take(10)                   # Limit processing
-    .collect[List[ProcessedItem]]()  # Evaluation happens here
+    .collect[list[ProcessedItem]]()  # Evaluation happens here
 ```
 
 ### **Error Handling System** ✅ IMPLEMENTED
@@ -450,114 +329,6 @@ fn process_file(path: str) -> !ProcessedData:
     return process(config)
 # Compiler infers: (io.NotFound | io.PermissionDenied | parse.InvalidSyntax | ...)!ProcessedData
 ```
-
-#### **Error Trait (Implemented)**
-
-All errors implement an automatic `Error` trait with `.message()` method:
-
-```ryo
-# Automatic message generation
-error HttpError(status: int, message: str)
-
-result = fetch_resource(url) catch |e|:
-    print(e.message())  # Returns: "400: Bad Request"
-    return
-
-# Custom message implementations
-impl Error for CustomError:
-    fn message(self) -> str:
-        match self:
-            CustomError.Timeout(duration):
-                return f"Operation timed out after {duration}ms"
-            CustomError.NotFound(resource):
-                return f"Resource not found: {resource}"
-```
-
-#### **Pattern Matching (Implemented)**
-
-- **Single error types**: Exhaustive matching required (all variants must be handled)
-- **Error unions**: Exhaustive matching required (all error types in union must be handled, or use catch-all)
-
-```ryo
-# Exhaustive matching for single error type
-result = divide(10.0, 0.0) catch |e|:
-    match e:
-        math.DivisionByZero:
-            print("Cannot divide by zero")
-    return
-
-# Exhaustive matching for error unions
-result = complex_operation() catch |e|:
-    match e:
-        network.Timeout(duration):
-            print(f"Timeout after {duration}ms")
-        network.ConnectionFailed(reason):
-            print(f"Connection failed: {reason}")
-        parse.InvalidJson(reason):
-            print(f"Parse error: {reason}")
-        validation.InvalidData(reason):
-            print(f"Validation error: {reason}")
-    return
-
-# Using catch-all for generic error handling
-result = complex_operation() catch |e|:
-    match e:
-        network.Timeout(duration):
-            print(f"Timeout after {duration}ms")
-        _:  # Explicit catch-all: handle all other errors generically
-            log_error(e.message())
-            print("Other error occurred")
-    return
-```
-
-#### **Error Composition (Implemented)**
-
-Automatic error composition from `try` expressions eliminates the need for wrapper types:
-
-```ryo
-# No wrapper types needed - errors automatically composed!
-fn legacy_interface() -> !ProcessedData:
-    content = try files.read_text(path)   # io.ReadFailed error
-    config = try parse_config(content)    # parse.InvalidFormat error
-    return process(config)
-# Compiler automatically infers: (io.ReadFailed | parse.InvalidFormat)!ProcessedData
-```
-
-#### **Future: Error Context and Chaining**
-
-Enhanced error context for more informative error chains:
-
-```ryo
-# Future error context system
-trait ErrorContext[E]:
-    fn with_context(self, context: str) -> ContextError[E]
-
-struct ContextError[E]:
-    source: E
-    context: str
-
-impl[E] ErrorContext[E] for E:
-    fn with_context(self, context: str) -> ContextError[E]:
-        return ContextError { source: self, context }
-
-# Usage
-fn load_user_config(user_id: int) -> !(UserConfig):
-    path = f"/users/{user_id}/config.toml"
-    config = try parse_config_file(path)
-        .with_context(f"Failed to load config for user {user_id}")
-    return config
-```
-
-#### **Benefits of Error Unions**
-
-- ✅ **Zero boilerplate**: No manual wrapper types required
-- ✅ **Automatic inference**: Compiler tracks error types from `try` expressions
-- ✅ **Type safety**: All errors are tracked and checked by the type system
-- ✅ **Ergonomic**: `try` keyword makes error propagation natural
-- ✅ **Safety First**: Exhaustive matching by default ensures all error cases are handled; explicit catch-all (`_`) for generic handling when needed
-- ✅ **Composable**: Functions naturally compose without explicit error mapping
-
-**See the [Language Specification](specification.md) Sections 4.9, 4.10, and 7.2-7.4 for complete error handling documentation.**
 
 ### **Attribute System**
 
@@ -633,10 +404,10 @@ Currently, Ryo has basic f-strings. Enhanced formatting capabilities are planned
 ```ryo
 # Future formatting trait system
 trait Display:
-    fn fmt(&self, formatter: &mut Formatter) -> FormatError!()
+    fn fmt(&self, formatter: &mut Formatter) -> FormatError!void
 
 trait Debug:
-    fn fmt(&self, formatter: &mut Formatter) -> FormatError!()
+    fn fmt(&self, formatter: &mut Formatter) -> FormatError!void
 
 # Automatic implementations possible with attributes
 #[derive(Debug)]
@@ -645,7 +416,7 @@ struct Point:
     y: float
 
 impl Display for Point:
-    fn fmt(&self, formatter: &mut Formatter) -> FormatError!():
+    fn fmt(&self, formatter: &mut Formatter) -> FormatError!void:
         formatter.write(f"({self.x}, {self.y})")
 ```
 
@@ -682,7 +453,7 @@ struct Currency:
     symbol: str
 
 impl Display for Currency:
-    fn fmt(&self, formatter: &mut Formatter) -> FormatError!():
+    fn fmt(&self, formatter: &mut Formatter) -> FormatError!void:
         formatter.write(f"{self.symbol}{self.amount:.2}")
 
 price = Currency { amount: 123.456, symbol: "$" }
@@ -793,9 +564,9 @@ struct TypeInfo:
 
 enum TypeKind:
     Primitive { primitive_type: PrimitiveType }
-    Struct { fields: List[FieldInfo] }
-    Enum { variants: List[VariantInfo> }
-    Tuple { elements: List[TypeInfo] }
+    Struct { fields: list[FieldInfo] }
+    Enum { variants: list[VariantInfo> }
+    Tuple { elements: list[TypeInfo] }
     Array { element_type: TypeInfo, length: int }
 
 struct FieldInfo:
@@ -870,56 +641,6 @@ utils.Matrix()   # Clean public API
 
 **Implementation Complexity:** Medium
 **Comparison:** Rust has this (essential for libraries), Go doesn't (major pain point)
-
----
-
-#### **File-Level Privacy (`file` keyword)**
-
-**Status:** Deferred (maybe never implement)
-**Priority:** Low
-
-**Problem:**
-Sometimes want items visible only within one file, not entire module (directory).
-
-**Current Limitation:**
-```ryo
-# server/http.ryo
-fn helper1():  # Module-private - visible to routes.ryo too
-    pass
-
-fn helper2():  # Module-private - also visible to routes.ryo
-    pass
-
-# server/routes.ryo can see helper1() and helper2()
-```
-
-**Proposed Solution:**
-```ryo
-# server/http.ryo
-file fn truly_private_helper():  # Only visible in http.ryo
-    pass
-
-fn module_helper():              # Visible to all server/*.ryo
-    truly_private_helper()       # OK - same file
-
-# server/routes.ryo
-fn register():
-    http.module_helper()            # ✓ OK
-    http.truly_private_helper()     # ✗ ERROR - file-private
-```
-
-**Benefits:**
-- **Finer Control:** Can hide implementation details within single file
-- **Large Modules:** Helps organize large multi-file modules
-- **Swift Compatibility:** Matches Swift's `fileprivate`
-
-**Drawbacks:**
-- **Complexity:** Fourth access level complicates mental model
-- **Limited Use:** Most cases solved by splitting modules
-- **Go Precedent:** Go manages fine without this
-
-**Decision:** Defer indefinitely. Three access levels are sufficient.
-**Alternative:** Use code comments and naming conventions (`_internal_helper`)
 
 ---
 
@@ -1157,7 +878,7 @@ impl Drawable for Rectangle:
         return self.width * self.height
 
 # Dynamic dispatch with trait objects
-fn process_shapes(shapes: List[&dyn Drawable]):
+fn process_shapes(shapes: list[&dyn Drawable]):
     for shape in shapes:
         shape.draw()  # Dynamic dispatch - runtime polymorphism
         print(f"Area: {shape.area()}")
@@ -1400,7 +1121,7 @@ A Jupyter kernel would enable interactive development and data exploration with 
 **Basic Kernel Features:**
 ```ryo
 # Interactive cell execution
-fn analyze_data(data: List[f64]) -> Statistics:
+fn analyze_data(data: list[f64]) -> Statistics:
     return Statistics{
         mean: data.sum() / data.len(),
         median: data.median(),
@@ -1603,31 +1324,6 @@ Based on analysis of missing features and their importance to Ryo's goals, here 
 18. **Web Framework** - High-performance web development framework
 
 *Rationale: These features serve specialized use cases and can be added later without affecting core language design.*
-
-### **Timeline Estimates**
-
-**Version 1.0 (Core Language):**
-- Current async/await concurrency model
-- Basic ownership and borrowing
-- Fundamental types and collections
-- Basic error handling with error types and error unions (`ErrorType!SuccessType`)
-
-**Version 1.5 (Essential Extensions):**
-- Advanced generics system
-- Iterator traits and lazy evaluation  
-- Standard error trait with conversions
-- Basic attribute system
-
-**Version 2.0 (Full Featured):**
-- Dynamic dispatch via trait objects
-- Advanced string formatting
-- Enhanced pattern matching
-- CSP concurrency extensions (optional)
-
-**Version 2.5+ (Advanced Features):**
-- Compile-time reflection
-- SIMD support
-- Advanced module system features
 
 ### **Feature Dependencies**
 
