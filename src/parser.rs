@@ -1,8 +1,4 @@
-use chumsky::{
-    input::ValueInput,
-    prelude::*,
-    span::SimpleSpan,
-};
+use chumsky::{input::ValueInput, prelude::*, span::SimpleSpan};
 
 use crate::ast::*;
 use crate::lexer::Token;
@@ -103,12 +99,14 @@ where
         .then(type_annotation)
         .then_ignore(just(Token::Assign))
         .then(expression_parser())
-        .map(|(((mutable, name), type_annotation), initializer)| VarDecl {
-            mutable,
-            name,
-            type_annotation,
-            initializer,
-        })
+        .map(
+            |(((mutable, name), type_annotation), initializer)| VarDecl {
+                mutable,
+                name,
+                type_annotation,
+                initializer,
+            },
+        )
 }
 
 /// Parse an expression with precedence handling
@@ -142,14 +140,11 @@ where
                     .separated_by(just(Token::Comma))
                     .allow_trailing()
                     .collect::<Vec<_>>()
-                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .delimited_by(just(Token::LParen), just(Token::RParen)),
             )
-            .map_with(|(name, args), e| {
-                Expression::new(ExprKind::Call(name, args), e.span())
-            });
+            .map_with(|(name, args), e| Expression::new(ExprKind::Call(name, args), e.span()));
 
-            let parenthesized = expr
-                .delimited_by(just(Token::LParen), just(Token::RParen));
+            let parenthesized = expr.delimited_by(just(Token::LParen), just(Token::RParen));
 
             call.or(literal).or(parenthesized)
         };
@@ -402,12 +397,10 @@ mod tests {
 
         if let StmtKind::VarDecl(decl) = &program.statements[0].kind {
             match &decl.initializer.kind {
-                ExprKind::UnaryOp(UnaryOperator::Neg, expr) => {
-                    match &expr.kind {
-                        ExprKind::Literal(Literal::Int(42)) => {}
-                        _ => panic!("Expected Int(42)"),
-                    }
-                }
+                ExprKind::UnaryOp(UnaryOperator::Neg, expr) => match &expr.kind {
+                    ExprKind::Literal(Literal::Int(42)) => {}
+                    _ => panic!("Expected Int(42)"),
+                },
                 _ => panic!("Expected UnaryOp(Neg)"),
             }
         } else {

@@ -45,7 +45,10 @@ impl Statement {
     fn pretty_print_inline(&self) {
         match &self.kind {
             StmtKind::VarDecl(_) => {
-                print!("Statement [VarDecl] ({}..{})", self.span.start, self.span.end);
+                print!(
+                    "Statement [VarDecl] ({}..{})",
+                    self.span.start, self.span.end
+                );
             }
         }
     }
@@ -85,10 +88,10 @@ impl StmtKind {
 ///   - `mut counter: int = 0`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl {
-    pub mutable: bool,                      // true if 'mut' keyword was present
-    pub name: Ident,                        // variable name
-    pub type_annotation: Option<TypeExpr>,  // optional explicit type
-    pub initializer: Expression,            // initial value expression
+    pub mutable: bool,                     // true if 'mut' keyword was present
+    pub name: Ident,                       // variable name
+    pub type_annotation: Option<TypeExpr>, // optional explicit type
+    pub initializer: Expression,           // initial value expression
 }
 
 impl VarDecl {
@@ -102,16 +105,23 @@ impl VarDecl {
         }
 
         // Print name
-        println!("{}├── name: {} ({}..{})", new_prefix, self.name.name, self.name.span.start, self.name.span.end);
+        println!(
+            "{}├── name: {} ({}..{})",
+            new_prefix, self.name.name, self.name.span.start, self.name.span.end
+        );
 
         // Print type annotation if present
         if let Some(ty) = &self.type_annotation {
-            println!("{}├── type: {} ({}..{})", new_prefix, ty.name, ty.span.start, ty.span.end);
+            println!(
+                "{}├── type: {} ({}..{})",
+                new_prefix, ty.name, ty.span.start, ty.span.end
+            );
         }
 
         // Print initializer
         println!("{}└── initializer:", new_prefix);
-        self.initializer.pretty_print(&format!("{}    ", new_prefix));
+        self.initializer
+            .pretty_print(&format!("{}    ", new_prefix));
     }
 }
 
@@ -185,7 +195,10 @@ impl Expression {
             ExprKind::Call(name, _) => format!("Call({})", name),
         };
 
-        println!("{}{} ({}..{})", prefix, connector_name, self.span.start, self.span.end);
+        println!(
+            "{}{} ({}..{})",
+            prefix, connector_name, self.span.start, self.span.end
+        );
 
         let new_prefix = format!("{}  ", prefix);
         match &self.kind {

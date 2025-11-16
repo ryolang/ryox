@@ -1,3 +1,12 @@
+## Code quality
+
+Always run `cargo fmt` when modify a .rs file.
+Always run `cargo clippy` when modify a .rs file.
+
+## Follow Rust Pragmatic Rules
+
+https://microsoft.github.io/rust-guidelines/agents/all.txt
+
 ## Architecture & Code Organization
 
 Apply the CRISP and SOLID patterns.

@@ -118,7 +118,7 @@
 //! - **Milestone 5+**: Optimizations, JIT mode for REPL, more types
 //! - **Long-term**: Full optimization pipeline, debugging info, profiling support
 
-use crate::ast::{BinaryOperator, Expression, ExprKind, Literal, Program, UnaryOperator};
+use crate::ast::{BinaryOperator, ExprKind, Expression, Literal, Program, UnaryOperator};
 use cranelift::codegen::isa;
 use cranelift::codegen::settings::{self, Configurable};
 use cranelift::prelude::*;
@@ -215,7 +215,7 @@ impl Codegen {
         // This is responsible for generating the actual object file format (.o or .obj)
         // that can be linked with system libraries to create an executable.
         let obj_builder = ObjectBuilder::new(
-            isa,          // The ISA determines instruction encoding
+            isa,                                       // The ISA determines instruction encoding
             "ryo_module", // Module name (appears in debug info, not critical for now)
             cranelift_module::default_libcall_names(), // Standard C library function names
         )
@@ -547,9 +547,7 @@ impl Codegen {
         match &expr.kind {
             // Integer literals: Load constant value
             // Example: `42` → iconst.i64 42
-            ExprKind::Literal(Literal::Int(val)) => {
-                Ok(builder.ins().iconst(int_type, *val as i64))
-            }
+            ExprKind::Literal(Literal::Int(val)) => Ok(builder.ins().iconst(int_type, *val as i64)),
 
             // String literals: Store in data section and return pointer
             // Example: `"hello"` → address of string in .rodata section
@@ -570,7 +568,15 @@ impl Codegen {
             // Example: `-5` → iconst.i64 5, then ineg
             // This performs two's complement negation: -x = ~x + 1
             ExprKind::UnaryOp(UnaryOperator::Neg, sub_expr) => {
-                let sub_val = Self::eval_expr(builder, sub_expr, module, data_ctx, string_data, int_type, triple)?;
+                let sub_val = Self::eval_expr(
+                    builder,
+                    sub_expr,
+                    module,
+                    data_ctx,
+                    string_data,
+                    int_type,
+                    triple,
+                )?;
                 Ok(builder.ins().ineg(sub_val))
             }
 
@@ -578,8 +584,24 @@ impl Codegen {
             // Example: `2 + 3` → iconst 2, iconst 3, iadd
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 // Recursively evaluate left and right operands
-                let lhs_val = Self::eval_expr(builder, lhs, module, data_ctx, string_data, int_type, triple)?;
-                let rhs_val = Self::eval_expr(builder, rhs, module, data_ctx, string_data, int_type, triple)?;
+                let lhs_val = Self::eval_expr(
+                    builder,
+                    lhs,
+                    module,
+                    data_ctx,
+                    string_data,
+                    int_type,
+                    triple,
+                )?;
+                let rhs_val = Self::eval_expr(
+                    builder,
+                    rhs,
+                    module,
+                    data_ctx,
+                    string_data,
+                    int_type,
+                    triple,
+                )?;
 
                 // Emit the appropriate instruction based on operator
                 let result = match op {
@@ -595,7 +617,15 @@ impl Codegen {
             // Function calls: Handle print() with syscall
             ExprKind::Call(name, args) => {
                 if name == "print" {
-                    Self::generate_print_call(builder, args, module, data_ctx, string_data, int_type, triple)?;
+                    Self::generate_print_call(
+                        builder,
+                        args,
+                        module,
+                        data_ctx,
+                        string_data,
+                        int_type,
+                        triple,
+                    )?;
 
                     // IMPORTANT: print() should return void/unit type (nothing)
                     // Currently returns int(0) as a placeholder until proper void type is implemented.
@@ -651,7 +681,10 @@ impl Codegen {
     ) -> Result<(), String> {
         // Validate: print() takes exactly one argument
         if args.len() != 1 {
-            return Err(format!("print() takes exactly 1 argument, got {}", args.len()));
+            return Err(format!(
+                "print() takes exactly 1 argument, got {}",
+                args.len()
+            ));
         }
 
         // Extract the string literal argument
@@ -675,7 +708,9 @@ impl Codegen {
         // Validate platform support
         use target_lexicon::OperatingSystem;
         match triple.operating_system {
-            OperatingSystem::Darwin { .. } | OperatingSystem::MacOSX { .. } | OperatingSystem::Linux => {
+            OperatingSystem::Darwin { .. }
+            | OperatingSystem::MacOSX { .. }
+            | OperatingSystem::Linux => {
                 // Supported platforms (Darwin is the kernel name for macOS)
             }
             _ => {
