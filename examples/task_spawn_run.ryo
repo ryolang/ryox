@@ -1,0 +1,51 @@
+# Example 1: Basic Task Execution (task.run and task.spawn)
+#
+# This example demonstrates the difference between:
+# - task.spawn: Fire-and-forget execution (no return value)
+# - task.run: Returns a future that you can await for results
+#
+# Concepts demonstrated:
+# - Concurrent task execution with task.spawn
+# - Future-based results with task.run
+# - Suspending with .await
+# - task.delay for simulating long operations
+
+import std.io
+import std.task
+
+# A normal, synchronous function (no 'async' keyword needed)
+fn calculate_sum(a: int, b: int) -> int:
+	# Simulate a long computation
+	task.delay(100ms).await
+	return a + b
+
+fn main():
+	io.println("1. Starting main thread.")
+
+	# 1. Fire-and-forget task (no return value)
+	task.spawn:
+		io.println("   [Spawn] Background task started.")
+		task.delay(50ms).await
+		io.println("   [Spawn] Background task finished.")
+
+	# 2. Task that returns a future
+	sum_future = task.run:
+		io.println("   [Run] Calculation task started.")
+		return calculate_sum(10, 20)
+
+	io.println("2. Waiting for calculation to finish...")
+
+	# 3. Suspend the current task until the future is ready
+	result = sum_future.await
+
+	io.println(f"3. Result received: {result}")
+	io.println("4. Main thread finished.")
+
+# Expected Output (Tasks run concurrently):
+# 1. Starting main thread.
+#    [Spawn] Background task started.
+#    [Run] Calculation task started.
+# 2. Waiting for calculation to finish...
+#    [Spawn] Background task finished.
+# 3. Result received: 30
+# 4. Main thread finished.

@@ -22,7 +22,7 @@ hide:
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License">
 </p>
 
-Ryo **/ˈraɪoʊ/** (Rye-oh) is a modern programming language designed for developers who love **Python's simplicity** but need **memory safety and native performance**. Built with familiar async/await patterns and compile-time safety checks.
+Ryo **/ˈraɪoʊ/** (Rye-oh) is a modern programming language designed for developers who love **Python's simplicity** but need **memory safety and native performance**. Built with familiar Task/Future/Channel patterns and compile-time safety checks.
 
 !!! warning "Development Status"
     Ryo is in **pre-alpha development**. Not ready for production use.
@@ -33,7 +33,7 @@ Ryo **/ˈraɪoʊ/** (Rye-oh) is a modern programming language designed for devel
 
 2. **Memory-safe** — Ownership and borrowing prevent memory errors at compile time without a garbage collector. No null pointer exceptions, no use-after-free bugs.
 
-3. **Seamless async/await** — Built-in concurrency with familiar async/await patterns and a high-performance runtime for scalable applications.
+3. **Seamless concurrency** — Built-in concurrency with familiar Task/Future/Channel patterns and a high-performance runtime for scalable applications.
 
 4. **Static typing with inference** — Catch errors at compile time while keeping code concise. Type inference means less boilerplate.
 
@@ -66,14 +66,18 @@ error InvalidResponse
 ```ryo
 # src/main.ryo
 import http
+import std.task
 
-async fn fetch_user(id: int) -> (http.NetworkFailure | http.InvalidResponse)!User:
-    response = try await http.get(f"https://api.example.com/users/{id}")
-    user = try await response.json[User]()
+fn fetch_user(id: int) -> (http.NetworkFailure | http.InvalidResponse)!User:
+    response = try http.get(f"https://api.example.com/users/{id}").await
+    user = try response.json[User]().await
     return user
 
 fn main():
-    user = fetch_user(1) catch |e|:
+    user_future = task.run:
+        fetch_user(1)
+
+    user = user_future.await catch |e|:
         match e:
             http.NetworkFailure(reason):
                 print(f"Network error: {reason}")

@@ -12,9 +12,8 @@ const ryo = function (hljs) {
     keyword: [
       "and",
       "as",
-      "async",
-      "await",
       "break",
+      "case",
       "catch",
       "continue",
       "elif",
@@ -36,6 +35,7 @@ const ryo = function (hljs) {
       "package",
       "pub",
       "return",
+      "select",
       "struct",
       "trait",
       "try",
@@ -132,7 +132,7 @@ const ryo = function (hljs) {
   };
 
   const FUNCTION_DEF = {
-    begin: [/(async\s+)?fn/, /\s+/, /[a-zA-Z_][a-zA-Z0-9_]*/],
+    begin: [/fn/, /\s+/, /[a-zA-Z_][a-zA-Z0-9_]*/],
     beginScope: {
       1: "keyword",
       3: "title.function",

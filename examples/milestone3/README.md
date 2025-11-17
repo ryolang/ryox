@@ -196,7 +196,7 @@ These examples do NOT demonstrate (coming in future milestones):
 - ❌ Error handling
 - ❌ Structs and enums
 - ❌ Traits
-- ❌ Async/await
+- ❌ Task/Future runtime
 - ❌ Generic types
 
 ## Testing

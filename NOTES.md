@@ -42,10 +42,11 @@
 - [Melior - MLIR bindings for Rust](https://github.com/mlir-rs/melior)
 - [Compiler Explorer](https://github.com/compiler-explorer/compiler-explorer)
 
-**Async Runtimes**:
+**Concurrency Runtimes**:
 - [Smol - Small async runtime](https://github.com/smol-rs/smol)
 - [Pollster - Minimal executor](https://github.com/zesterer/pollster)
-- [Zig's async I/O discussion](https://kristoff.it/blog/zig-new-async-io/) - Function colorblindness
+- [Zig's I/O discussion](https://kristoff.it/blog/zig-new-async-io/) - Function colorblindness
+- [Go concurrency patterns](https://go.dev/tour/concurrency/) - Goroutines and channels
 
 **Performance & Benchmarking**:
 - [Mojo Benchmark Guide](https://mojodojo.dev/guides/std/Benchmark.html)

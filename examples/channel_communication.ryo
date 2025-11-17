@@ -1,0 +1,41 @@
+# Example 2: Safe Communication with Channels
+#
+# This example demonstrates how to safely transfer ownership of data
+# between tasks using channels. Channels are the idiomatic way to
+# communicate between concurrent tasks in Ryo.
+#
+# Concepts demonstrated:
+# - Creating typed channels with std.channel.create
+# - Transferring ownership via tx.send (data is moved)
+# - Receiving data with rx.recv (suspends until message available)
+# - Move semantics in concurrent contexts
+
+import std.channel
+import std.task
+import std.io
+
+fn background_worker(tx: sender[str]):
+	message = "Hello from the worker task!" # message is owned here
+
+	# Ownership of 'message' is MOVED into the channel
+	tx.send(message) # The worker task's 'message' variable is now invalid
+
+fn main():
+	# Create a buffered channel (e.g., buffer size 1)
+	tx, rx = std.channel.create[str](1)
+
+	# Spawn the worker, moving ownership of the sender into it
+	task.spawn:
+		background_worker(move tx) # 'tx' is moved into the closure
+
+	io.println("Waiting for message on channel...")
+
+	# Suspend the main task until a message is received
+	# The main task gains ownership of the string
+	received_message = try rx.recv()
+
+	io.println(f"Received: {received_message}")
+
+# Expected Output:
+# Waiting for message on channel...
+# Received: Hello from the worker task!

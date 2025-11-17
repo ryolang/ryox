@@ -63,7 +63,7 @@ For full details, see the [Language Specification](docs/specification.md) (Link 
 
 Ryo draws inspiration from the best features of modern programming languages:
 
-*   **🐍 Python** - Clean syntax with colons and indentation, f-strings, type inference, async/await
+*   **🐍 Python** - Clean syntax with colons and indentation, f-strings, type inference
 *   **🦀 Rust** - Ownership model for memory safety, algebraic data types (enums), pattern matching, trait system
 *   **🔥 Mojo** - Simplified ownership without lifetimes, value semantics, progressive complexity
 *   **🔷 Go** - Simplicity as a core value, fast compilation, pragmatic concurrency (CSP channels planned)

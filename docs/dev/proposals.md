@@ -361,8 +361,8 @@ pub extern "C" fn exported_function(x: int) -> int:
 
 ```ryo
 # Future conditional compilation attributes
-#[cfg(feature = "async")]
-import async_runtime
+#[cfg(feature = "runtime")]
+import task_runtime
 
 #[cfg(target_os = "linux")]
 fn platform_specific_function():
@@ -514,7 +514,7 @@ LOOKUP = comptime generate_lookup_table()
 
 **Limitations:**
 - Cannot perform runtime I/O operations
-- Cannot interact with async runtime state
+- Cannot interact with task runtime state
 - Sandboxed environment isolated from target runtime system
 - Error handling mechanisms for compile-time execution need definition
 
@@ -712,8 +712,8 @@ fn test_helper():
     pass
 
 # Feature flags
-#[cfg(feature = "async")]
-import async_runtime
+#[cfg(feature = "runtime")]
+import task_runtime
 
 #[cfg(feature = "simd")]
 fn vectorized_add(a: &[float], b: &[float]) -> Vec[float]:
@@ -794,7 +794,7 @@ http = "1.0"
 json = "0.5"
 
 [workspace.features]
-async = ["server/async", "client/async"]
+concurrent = ["server/concurrent", "client/concurrent"]
 ```
 
 **Per-Package Configuration:**
@@ -1030,11 +1030,11 @@ fn parallel_add(a: simd.f32x4, b: simd.f32x4) -> simd.f32x4:
      b = 0.0
    ```
 
-2. **Async Stack Traces**
-   - Show await points in async call chains
-   - Distinguish between sync and async frames
+2. **Concurrent Stack Traces**
+   - Show await points in task call chains
+   - Distinguish between sync and concurrent frames
    - Display future state transitions
-   - Crucial for debugging complex async applications
+   - Crucial for debugging complex concurrent applications
 
 3. **Custom Panic Handlers**
    ```ryo
@@ -1090,7 +1090,7 @@ fn parallel_add(a: simd.f32x4, b: simd.f32x4) -> simd.f32x4:
 **Rationale:**
 
 The v1.0 implementation provides solid debugging foundation. Future enhancements address:
-- **Async debugging** (increasingly important for modern applications)
+- **Concurrent debugging** (increasingly important for modern applications)
 - **Tool integration** (CI/CD, monitoring, crash reporting services)
 - **Performance optimization** (if stack trace overhead becomes a real bottleneck)
 - **Advanced debugging** (verbose output for complex issues)
@@ -1138,7 +1138,7 @@ results = analyze_data(global_data.prices)
 - Variable inspection and debugging
 - Rich output formatting (HTML, images, plots)
 - Integration with data visualization libraries
-- Async cell execution with progress indicators
+- Concurrent cell execution with progress indicators
 
 #### **Language Server Protocol (LSP)**
 
@@ -1172,7 +1172,7 @@ edition = "2024"
 [dependencies]
 http = "1.0"
 json = "0.5"
-async-runtime = "2.1"
+task-runtime = "2.1"
 
 [dev-dependencies]
 test-framework = "1.0"
@@ -1231,8 +1231,8 @@ fn test_addition():
     assert_eq(add(2, 3), 5)
 
 #[test]
-async fn test_http_request():
-    response = await http.get("https://api.test.com/health")
+fn test_http_request():
+    response = http.get("https://api.test.com/health").await
     assert_eq(response.status, 200)
 
 #[benchmark]
@@ -1261,11 +1261,12 @@ fn factorial(n: int) -> int:
 
 #### **Web Framework**
 
-A high-performance web framework leveraging Ryo's async capabilities and memory safety.
+A high-performance web framework leveraging Ryo's concurrency capabilities and memory safety.
 
 **Web Framework Example:**
 ```ryo
 import web
+import std.task
 
 # File: http/errors.ryo
 error NotFound
@@ -1275,14 +1276,14 @@ error DatabaseError(message: str)
 import http
 
 #[route("/users/{id}")]
-async fn get_user(id: int) -> (http.NotFound | http.DatabaseError)!JsonResponse[User]:
-    user = try await database.find_user(id)
+fn get_user(id: int) -> (http.NotFound | http.DatabaseError)!JsonResponse[User]:
+    user = try database.find_user(id).await
     return JsonResponse.new(user)
 
 fn main():
     app = web.App.new()
     app.route_handler(get_user)
-    async_runtime.run(app.serve("0.0.0.0:8080"))
+    try app.serve("0.0.0.0:8080").await
 ```
 
 ## Implementation Priority and Timeline
