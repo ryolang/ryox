@@ -385,7 +385,7 @@ print(increment())  # 2
 
 - Closure traits (`Fn`, `FnMut`, `FnOnce`) as actual traits
 - Generic closures: `fn[T](x: T) -> T`
-- Async closures for async runtime
+- Closures for concurrent runtime
 - Closure optimization (devirtualization)
 
 ### Milestone 5: Module System (Design Phase) ✅ COMPLETE
@@ -1905,8 +1905,8 @@ Available commands:
 **Effort:** 2-3 weeks
 **Dependencies:** Core language complete (M1-M26)
 
-### Async/Await Runtime
-**Goal:** Implement asynchronous programming for I/O-bound applications
+### Task/Future/Channel Runtime
+**Goal:** Implement concurrent programming for I/O-bound applications
 
 **Why Post-v0.1.0:**
 - Requires mature ownership and type system (Milestones 12-21)
@@ -1915,21 +1915,28 @@ Available commands:
 - Allows more design iteration based on community feedback
 
 **Features:**
-- `async fn` and `await` keywords
-- Future trait and async runtime
-- async-aware standard library (async I/O, async HTTP)
+- `task.run`, `task.spawn`, `select`, and `case` keywords
+- `future[T]` type and concurrent runtime
+- Standard library modules (`std.task`, `std.channel`)
 - Single-threaded and multi-threaded executors
-- Cancellation and timeouts
+- Cancellation and timeouts via `task.cancel()` and `task.timeout()`
+- Channel-based communication (`sender[T]`, `receiver[T]`)
 
 **Example:**
 ```ryo
-async fn fetch_url(url: &str) -> http.Error!str:
-    response = await http.get(url)
-    body = await response.text()
+import std.task
+import std.channel
+
+fn fetch_url(url: &str) -> http.Error!str:
+    response = try http.get(url).await
+    body = try response.text().await
     return body
 
-async fn main():
-    data = await fetch_url("https://api.example.com")
+fn main():
+    data_future = task.run:
+        fetch_url("https://api.example.com")
+
+    data = try data_future.await
     print(data)
 ```
 
@@ -2021,7 +2028,7 @@ impl[T] Stack[T]:
 - **Profile-Guided Optimization (PGO):** Runtime profiling for better optimization
 
 **Standard Library Expansion:**
-- **HTTP Client/Server:** Async HTTP/2 and HTTP/3 support
+- **HTTP Client/Server:** HTTP/2 and HTTP/3 support with concurrent handlers
 - **JSON/YAML/TOML:** Serialization and deserialization
 - **Regular Expressions:** Fast regex engine
 - **Cryptography:** Hashing, encryption, TLS support
@@ -2038,7 +2045,7 @@ See [proposals.md](proposals.md) for detailed designs of these features.
 - **Code Generation:** `cranelift` family of crates
 - **Error Reporting:** `ariadne` for beautiful error messages
 - **CLI:** `clap` for command-line interface
-- **Async Runtime:** `tokio` or `futures` for async/await support
+- **Concurrent Runtime:** Runtime library for Task/Future support (to be determined)
 
 ### Testing Strategy
 - Unit tests for each compiler phase
@@ -2070,12 +2077,12 @@ The 26 milestones in Phases 1-4 represent the **core language** needed for Ryo v
 ✅ **Developer Experience:** Clear error messages with suggestions, comprehensive documentation
 
 **What v0.1.0 does NOT include** (deferred to Phase 5):
-- ❌ Async/await runtime (v0.2+)
+- ❌ Task/Future runtime (v0.2+)
 - ❌ FFI/unsafe blocks (v0.3+)
 - ❌ Full generics system (v0.4+)
 - ❌ LSP/advanced tooling (v0.2+)
 
-This foundation enables building **synchronous applications** including CLI tools, build systems, compilers, data processing pipelines, and game engines. Async/FFI features will follow based on community needs.
+This foundation enables building **synchronous applications** including CLI tools, build systems, compilers, data processing pipelines, and game engines. Concurrency/FFI features will follow based on community needs.
 
 ## Development Timeline
 
@@ -2115,11 +2122,11 @@ This section documents intentional limitations and pragmatic trade-offs in the r
 - **Impact:** Some code duplication, but v0.1.0 remains usable for most applications
 - **Timeline:** Full generics in v0.4+ (Phase 5)
 
-**No Async/Await in v0.1.0:**
+**No Concurrency Runtime in v0.1.0:**
 - **Why:** Requires mature runtime, complex implementation, not essential for initial adoption
 - **Workaround:** Use synchronous I/O (works fine for many applications)
 - **Impact:** Higher latency for I/O-bound applications, but predictable performance
-- **Timeline:** Async runtime in v0.2+ (Phase 5)
+- **Timeline:** Task/Future runtime in v0.2+ (Phase 5)
 
 **No FFI in v0.1.0:**
 - **Why:** Safety model must be stable, `unsafe` requires careful audit
@@ -2188,7 +2195,7 @@ This section documents intentional limitations and pragmatic trade-offs in the r
 **Single-Threaded (v0.1.0):**
 - No multi-threading or parallelism support
 - Trade-off: Simpler concurrency model (no data races by design)
-- Timeline: Threading in Phase 5 (alongside async)
+- Timeline: Threading in Phase 5 (alongside Task runtime)
 
 ### Rationale for Trade-offs
 
@@ -2202,7 +2209,7 @@ The goal is a **production-ready core language** that can evolve based on actual
 
 ## Conclusion
 
-This roadmap represents an **honest, achievable plan** for building Ryo v0.1.0 over approximately 18-26 months. By deferring advanced features (async, FFI, generics) to Phase 5, we can deliver a solid, usable language faster while maintaining room for future growth.
+This roadmap represents an **honest, achievable plan** for building Ryo v0.1.0 over approximately 18-26 months. By deferring advanced features (concurrency runtime, FFI, generics) to Phase 5, we can deliver a solid, usable language faster while maintaining room for future growth.
 
 **Next steps:**
 1. Complete Phase 2 (Functions, Control Flow, Core Types)

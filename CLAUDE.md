@@ -49,7 +49,7 @@
 2. **Python-Inspired Syntax** - Colons and indentation instead of braces
 3. **Compile-Time Safety** - Static typing with inference, exhaustive pattern matching
 4. **No Garbage Collection** - Predictable performance through ownership
-5. **Built in Concurrency** - Task based runtime async/await for I/O-bound work
+5. **Built in Concurrency** - Task/Future/Channel runtime for I/O-bound work
 
 **Target Audience:** Python developers who need better performance, memory safety, and static type checking with an easier learning curve than Rust.
 

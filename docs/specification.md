@@ -2,7 +2,7 @@
 
 ## 1. Introduction & Vision
 
-*   **Vision:** Ryo is a statically-typed, compiled programming language designed to prioritize developer experience while maintaining memory safety and competitive performance. It aims to combine the compile-time memory safety guarantees inspired by Rust (simplified, without a garbage collector), the approachable syntax and developer experience reminiscent of Python, and familiar async/await concurrency patterns. Where trade-offs exist, Ryo explicitly chooses developer productivity and debugging capability over raw performance optimization.
+*   **Vision:** Ryo is a statically-typed, compiled programming language designed to prioritize developer experience while maintaining memory safety and competitive performance. It aims to combine the compile-time memory safety guarantees inspired by Rust (simplified, without a garbage collector), the approachable syntax and developer experience reminiscent of Python, and familiar Task/Future/Channel concurrency patterns. Where trade-offs exist, Ryo explicitly chooses developer productivity and debugging capability over raw performance optimization.
 
 *   **Target Domains:** Web Backend Development (API Servers, Microservices), CLI Tools, Network Services & Proxies, WebAssembly (Wasm) Applications & Libraries, Game Development (Tooling, Scripting, Core Logic), Data Processing & ETL Pipelines, and Higher-Level Embedded Systems.
 *   **Core Goals:**
@@ -10,7 +10,7 @@
     *   **Rust-like Safety (Simplified):** Memory safe by default via ownership and borrowing, without GC. Compile-time checks prevent dangling pointers, data races, use-after-free. Simplified borrowing model compared to Rust (no manual lifetimes).
     *   **Go-like Simplicity:** Minimal keyword set, straightforward core concepts, avoid unnecessary feature creep. Focus on providing essential, orthogonal features.
     *   **Competitive Performance:** Compiled to efficient native code (or Wasm) via **Cranelift**. No GC pauses. Deterministic resource management. Note: Ryo includes automatic debugging features (stack traces, error context) that add ~5-10% runtime overhead but significantly improve developer experience.
-    *   **Effective Concurrency:** Simple and safe concurrency using familiar async/await patterns with an async runtime (planned).
+    *   **Effective Concurrency:** Simple and safe concurrency using Task/Future/Channel patterns with a concurrent runtime (planned).
     *   **Compile-Time Power:** Integrated compile-time function execution (`comptime`) for metaprogramming, configuration, and optimization (planned for future implementation).
     *.  **Excellent Tooling:** Provide a seamless experience out-of-the-box, including a fast compiler, integrated package manager, REPL, and testing framework.
 
@@ -20,7 +20,7 @@
 
 Ryo synthesizes ideas from several modern programming languages:
 
-*   **Python** - Clean syntax with colons and indentation, f-strings, type inference, async/await, developer-friendly design
+*   **Python** - Clean syntax with colons and indentation, f-strings, type inference, developer-friendly design
 *   **Rust** - Ownership model for memory safety, algebraic data types (enums with data), pattern matching, trait system, Result/Option types
 *   **Mojo** - Simplified ownership without manual lifetimes, value semantics, progressive complexity model
 *   **Go** - Simplicity as a core design principle, fast compilation, built-in concurrency primitives, minimal feature set
@@ -97,7 +97,7 @@ See Section 7.10 for complete configuration reference.
 *   **Encoding:** Source files are UTF-8 encoded, allowing for Unicode characters in strings and potentially identifiers (if identifier rules are expanded later).
 *   **Identifiers:** `[a-zA-Z_][a-zA-Z0-9_]*`. Case-sensitive.
     *   *Convention:* Follow `snake_case` for variables, functions, and modules. Use `PascalCase` for user-defined types (structs, enums, traits) and enum variants. Built-in fundamental types (primitives and collections) use lowercase (e.g., `int`, `str`, `list`, `map`). *(Rationale: Adopting common conventions enhances readability and aligns with practices in Python and Rust).*
-*   **Keywords:** `fn`, `struct`, `enum`, `trait`, `impl`, `mut`, `if`, `elif`, `else`, `for`, `in`, `return`, `break`, `continue`, `import`, `match`, `pub`, `package`, `true`, `false`, `none`, `void`, `async`, `await`, `move`, `error`, `try`, `catch`, `orelse`. (Note: `comptime`, `unsafe` are planned for future implementation. `void` is reserved for the unit type. `as`, `default`, `let` are not keywords. `package` is an access modifier keyword added for package-internal visibility).
+*   **Keywords:** `fn`, `struct`, `enum`, `trait`, `impl`, `mut`, `if`, `elif`, `else`, `for`, `in`, `return`, `break`, `continue`, `import`, `match`, `pub`, `package`, `true`, `false`, `none`, `void`, `move`, `error`, `try`, `catch`, `orelse`, `select`, `case`. (Note: `comptime`, `unsafe` are planned for future implementation. `void` is reserved for the unit type. `as`, `default`, `let` are not keywords. `package` is an access modifier keyword added for package-internal visibility. `select` and `case` are used for non-deterministic concurrent operations).
 *   **Operators:** Standard set including arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), logical (`and`, `or`, `not`), assignment (`=`), type annotation (`:`), scope/literal delimiters (`{`, `}`, `[`, `]`, `(` `)`), access (`.`), error union prefix (`!`), optional chaining (`?.`).
     *   **Important Note:** The `!` operator is used exclusively for error union type prefixes (`!T` = error or T, `ErrorType!T` = ErrorType or T). The `!` is NOT used for logical negation—use `not` instead (following Python convention). Similarly, `?` operator in type context (`?T`) denotes optional types, while `?.` is the optional chaining operator.
     *   `_` (Underscore): The underscore `_` is treated as a special identifier. When used in patterns (`match`, destructuring assignment), it signifies a wildcard or an intentionally ignored value; it does not bind to a variable.
@@ -179,14 +179,6 @@ See Section 7.10 for complete configuration reference.
 *   **Control Flow:** `if/elif/else`, `for item in iterable:`, `for i in range(start, end):`.
 *   **Pattern Matching:** `match expr: Pattern1: ... Pattern2(bind): ... Pattern3 { x, y }: ... _ : ...` (`_` for wildcard/default).
 
-*   **Async/Await:** `async fn name() -> RetType:`, `await expression`,
-    ```ryo
-
-    async fn fetch_data() -> !Data:
-        response = try await http.get("https://api.example.com/data")
-        data = try await response.json[Data]()
-        return data
-    ```
 *   **Closures:** Anonymous functions with capture semantics.
     *   Single-line: `fn(args): expression`
     *   Multi-line: `fn(args):` followed by indented block (tab-based)
@@ -1083,7 +1075,7 @@ fn load_and_parse(path: str) -> !Config:
             print(f"Original error at {loc.file}:{loc.line}")
     ```
 
-*   *(Rationale: `try` clearly signals error propagation. Familiar to async/await users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired). Error context preservation ensures debugging information is never lost during propagation.)*
+*   *(Rationale: `try` clearly signals error propagation. Familiar to concurrent programming users. Automatic composition via inferred unions eliminates wrapper types (Zig-inspired). Error context preservation ensures debugging information is never lost during propagation.)*
 
 ### 7.4 Error Handling (`catch`)
 
@@ -1211,7 +1203,7 @@ note: Set RYOLANG_BACKTRACE=full for more verbose output
 - Each frame shows: frame number, function path, file:line:column location
 - Frame 0 is the panic call (most recent)
 - Frame N is the entry point (oldest)
-- Includes inlined functions and async boundaries
+- Includes inlined functions and task boundaries
 
 #### **Debug Symbols and Stack Traces**
 
@@ -1591,36 +1583,113 @@ error-traces = "off"  # Zero overhead, manual logging required
     *   **Future Extension:** Dynamic dispatch via trait objects (e.g., `&dyn Trait`) is planned for future versions to enable more flexible polymorphism patterns familiar to Python developers. See [Language Proposals](proposals.md#dynamic-dispatch-trait-objects) for details.
 *   **Associated Types:** Not supported initially. *(Rationale: Significant type system complexity).*
 
-## 9. Concurrency Model: Async/Await
+## 9. Concurrency Model: Task/Future/Channel
 
-*   **Model:** Cooperative concurrency using async/await with a high-performance runtime. Familiar to Python developers while maintaining memory safety.
-*   **Primitives:**
-    *   `async fn`: Declares an asynchronous function that returns a future.
-    *   `await`: Suspends execution until the awaited future completes.
-    *   **Async Runtime:** Built-in runtime handles task scheduling, I/O operations, and timers.
-    *   **Ownership Integration:** Async functions work seamlessly with Ryo's ownership model - values can be moved into async contexts safely.
-*   **Examples:**
+### 9.1 Rationale: Why This Model
+
+The Task/Future/Channel model, inspired by Go and adapted for Ryo's ownership system, provides a superior developer experience by eliminating function coloring while maintaining safety and performance. This aligns perfectly with Ryo's core goal of **Python-like Simplicity and Developer Experience (DX)**.
+
+### 9.2 Core Primitives and Safety
+
+Ryo's concurrency is built on three orthogonal primitives: **Task**, **Future**, and **Channel**.
+
+#### 9.2.1 Task and Future (Execution and Return)
+
+Tasks are Ryo's lightweight, non-OS-thread concurrency unit (like Go's goroutines).
+
+| Primitive | Ryo Syntax | Type Signature | Semantics |
+| :--- | :--- | :--- | :--- |
+| **Run** | `task.run(fn): ...` | `fn(f: fn() -> T) -> future[T]` | Executes the function `f` concurrently. Returns a **`future[T]`** to retrieve the result. |
+| **Spawn** | `task.spawn(fn): ...` | `fn(f: fn() -> void) -> void` | Executes the function `f` concurrently (fire-and-forget). Returns immediately. |
+| **Await** | `fut.await` | **`future[T]`** | A handle to a potentially pending value of type `T`. The `.await` method **suspends the current task** until the value is ready (it **does not block the OS thread**). |
+
+**Ownership Safety:** All data passed into `task.run` or `task.spawn` closures is **moved** by default (enforced by the compiler) to guarantee the new task owns all required state, preventing data races on captured variables.
+
+#### 9.2.2 Channels (Communication and Synchronization)
+
+Channels are the idiomatic, memory-safe way to communicate and synchronize between tasks by **transferring ownership** of data.
+
+| Primitive | Ryo Syntax | Semantics |
+| :--- | :--- | :--- |
+| **Create** | `tx, rx = std.channel.create[T]()` | Creates a pair of `sender[T]` and `receiver[T]` for type `T`. |
+| **Send** | `tx.send(value)` | Sends `value` to the channel. `value` is **moved** into the channel. The sending task may **suspend** if the channel's buffer is full. |
+| **Receive** | `rx.recv()` | **Suspends the current task** until a message is available. Returns the received value, gaining ownership of it. |
+
+#### 9.2.3 Error Integration
+
+The `future` type integrates seamlessly with Ryo's error system, using the correct lowercase and bracket syntax:
+
+*   **Type:** A future that can fail is represented as **`future[!T]`** (using the error-union prefix `!`).
+*   **Unwrap:** The `.await` operation is designed to work with the `try` operator:
     ```ryo
-    async fn process_request(req: Request) -> !Response:
-        data = try await database.query("SELECT * FROM users")
-        result = try await external_api.call(data)
-        return Response.json(result)
+    # task.run returns future[!str]
+    fetch_future = task.run:
+        # ... some operation that returns !str ...
+        return some_string
 
-    async fn process_all_requests():
-        tasks = [
-            process_request(req1),
-            process_request(req2),
-            process_request(req3)
-        ]
-        results = await async.gather(tasks)
-        print(f"Processed {results.len()} requests")
-
-    fn main():
-        # Start async runtime and run async code
-        async_runtime.run(process_all_requests())
+    body: str = try fetch_future.await # .await unwraps the outer future, try unwraps the inner Error Union.
     ```
-*   *(Rationale: Async/await is familiar to Python developers, provides excellent ergonomics for I/O-bound applications, and integrates well with Ryo's ownership model. The cooperative nature prevents many concurrency bugs while maintaining high performance).*
-*   **Future Extensions:** CSP-style channels (`chan[T]`, `select`) planned as optional additions for specialized use cases. See [Language Proposals](proposals.md#concurrency-extensions-csp-communicating-sequential-processes) for detailed CSP design.
+
+### 9.3 Concurrency Control Flow and Utilities
+
+#### 9.3.1 Non-Deterministic Waiting (`select`)
+
+`select` is a structural keyword for waiting on multiple, mixed concurrency primitives.
+
+```ryo
+select:
+    case let res = fut.await:          # Wait for a future
+        # ...
+    case let msg = rx.recv():          # Wait for a channel message
+        # ...
+    case task.delay(10s).await:        # Wait for a timeout
+        # ...
+```
+
+#### 9.3.2 Task Grouping and Management
+
+| Primitive | Ryo Syntax | Type Signature | Semantics |
+| :--- | :--- | :--- | :--- |
+| **Gather** | `task.gather([f1, f2])` | `fn(list[future[!T]]) -> future[Tuple]` | Waits for a list of **heterogeneous** futures. |
+| **Join** | `task.join([list_of_futures])` | `fn(list[future[T]]) -> future[list[T]]` | Waits for a list of **homogeneous** futures. |
+| **Any** | `task.any([f1, f2])` | `fn(list[future[T]]) -> future[T]` | Waits for the **first** future to complete. |
+| **Delay** | `task.delay(duration)` | `fn(duration) -> future[void]` | **Suspends the current task** for the specified duration. |
+| **Timeout** | `task.timeout(duration, fut)` | `fn(duration, future[!T]) -> future[!T]` | Fails with a `Timeout` error if the future does not complete in time. |
+| **Cancel** | `fut.cancel()` | `fn(future[T]) -> void` | Attempts to stop the associated task. |
+| **Group** | `task.group().spawn(fn)` | `struct task_group` | Manages the lifetime of child tasks (RAII-based scoping). |
+
+### 9.4 Example
+
+Basic concurrent task execution:
+
+```ryo
+import std.io
+import std.task
+
+fn calculate_sum(a: int, b: int) -> int:
+    task.delay(100ms).await
+    return a + b
+
+fn main():
+    # Fire-and-forget task
+    task.spawn:
+        io.println("Background task running")
+
+    # Task that returns a future
+    sum_future = task.run:
+        return calculate_sum(10, 20)
+
+    result = sum_future.await
+    io.println(f"Result: {result}")
+```
+
+*   *(Rationale: Task/Future/Channel eliminates function coloring while providing safe, ergonomic concurrency. Channels provide CSP-style communication without requiring special syntax. The model is familiar to Go developers while maintaining Ryo's ownership safety. No async/await keywords simplifies the language and removes the sync/async divide).*
+
+*   **See Examples:** Complete examples demonstrating task execution, channel communication, select statements, and task coordination can be found in:
+    *   `examples/task_spawn_run.ryo` - Basic task execution
+    *   `examples/channel_communication.ryo` - Safe message passing
+    *   `examples/select_example.ryo` - Non-deterministic waiting
+    *   `examples/task_join.ryo` - Task coordination with error handling
 
 ## 10. Compile-Time Execution (`comptime`)
 
@@ -2168,7 +2237,9 @@ fn main():
     *   `math`: Functions, constants, explicit overflow methods.
     *   `time`: `Instant`, `SystemTime`, `Duration`.
     *   `encoding.json`: `encode -> JsonError!str`, `decode -> JsonError!JsonValue`, `decode_into[T] -> JsonError!T`.
-    *   `net.http`: Async Client/Server primitives (`Request`, `Response`, async handlers, functions return `HttpError!T`).
+    *   `net.http`: Client/Server primitives (`Request`, `Response`, handlers, functions return `HttpError!T`).
+    *   `task`: Task execution primitives (`task.run`, `task.spawn`, `task.join`, `task.gather`, `task.any`, `task.delay`, `task.timeout`, `task.group`), `future[T]` type. *(Planned)*
+    *   `channel`: Channel communication primitives (`channel.create[T]`, `sender[T]`, `receiver[T]`), ownership-based message passing. *(Planned)*
     *   `os`: Env, args, basic filesystem ops (functions return `OsError!T`).
     *   `testing`: `#[test]` attribute, `assert()`, `assert_eq()`. *(Planned)*
     *   `sync`: `Shared[T]`/`Weak[T]` types for optional shared ownership.

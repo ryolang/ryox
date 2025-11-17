@@ -33,12 +33,33 @@ This directory contains practical code examples demonstrating various Ryo langua
 - Scope-based lifetime management
 - Safe memory access patterns
 
-### [async_example.ryo](async_example.ryo)
-**Concepts:** Asynchronous programming, concurrency, futures
-- `async fn` definitions and `await` expressions
-- Sequential vs. concurrent execution
-- Error handling in async contexts
-- Timeout and cancellation patterns
+### [task_spawn_run.ryo](../../examples/task_spawn_run.ryo)
+**Concepts:** Concurrent task execution, futures
+- `task.spawn` for fire-and-forget execution
+- `task.run` for returning futures
+- `.await` for suspending tasks
+- `task.delay` for simulating long operations
+
+### [channel_communication.ryo](../../examples/channel_communication.ryo)
+**Concepts:** Channel-based communication, ownership transfer
+- Creating typed channels with `std.channel.create`
+- Sending and receiving messages
+- Ownership transfer via channels
+- Safe concurrent communication
+
+### [select_example.ryo](../../examples/select_example.ryo)
+**Concepts:** Non-deterministic waiting, racing operations
+- `select` statement for waiting on multiple operations
+- Racing futures and channels
+- Timeout mechanisms with `task.delay`
+- Non-deterministic execution patterns
+
+### [task_join.ryo](../../examples/task_join.ryo)
+**Concepts:** Task coordination, error handling in concurrent contexts
+- Launching multiple concurrent tasks
+- Using `task.join` to wait for all tasks
+- Error propagation with `future[!T]`
+- List comprehensions with tasks
 
 ### [data_structures.ryo](data_structures.ryo)
 **Concepts:** Collections, custom types, methods, iteration
@@ -66,11 +87,14 @@ ryo build temperature_converter.ryo -o temp_converter
 For beginners, we recommend following this order:
 
 1. **hello_world.ryo** - Basic syntax and structure
-2. **temperature_converter.ryo** - Data types and pattern matching  
+2. **temperature_converter.ryo** - Data types and pattern matching
 3. **error_handling.ryo** - Error handling patterns
 4. **ownership_borrowing.ryo** - Memory management concepts
 5. **data_structures.ryo** - Working with collections and custom types
-6. **async_example.ryo** - Concurrent programming
+6. **task_spawn_run.ryo** - Basic concurrent tasks
+7. **channel_communication.ryo** - Channel-based communication
+8. **select_example.ryo** - Non-deterministic concurrent operations
+9. **task_join.ryo** - Task coordination and error handling
 
 ## Key Concepts Demonstrated
 

@@ -1,0 +1,54 @@
+# Example 4: Waiting for All Tasks (task.join with Errors)
+#
+# This example demonstrates how to launch multiple tasks and wait
+# for all of them to complete, properly handling errors using the
+# future[!T] syntax.
+#
+# Concepts demonstrated:
+# - Launching multiple concurrent tasks
+# - Using task.join to wait for all tasks
+# - Handling errors in concurrent contexts
+# - Error propagation with future[!T]
+# - List comprehensions with concurrent tasks
+
+import std.task
+import std.io
+
+# Assumed error type for simplicity
+error HttpError(status: int)
+
+fn fetch_status(url: str) -> !int:
+	io.println(f"   [Task] Fetching {url}...")
+	task.delay(50ms).await
+
+	if url == "fail.com":
+		return HttpError(status: 500) # Propagate an error
+
+	return 200 # Success status
+
+fn main():
+	urls = ["ok1.com", "fail.com", "ok2.com"]
+
+	# 1. Create a list of homogeneous futures: list[future[!int]]
+	# Each task.run creates a future that executes fetch_status
+	futures_list = [task.run: fetch_status(u) for u in urls]
+
+	io.println("Waiting for all tasks to join...")
+
+	# 2. task.join returns a future<!list[int]>
+	# The .await unwraps the future, the try unwraps the error union.
+	results = task.join(futures_list)
+
+	statuses: list[int] = results.await catch |e|:
+		io.println(f"ERROR: A task failed during join: {e.message()}")
+		return 1 # Exit with error code
+
+	io.println(f"SUCCESS: All statuses received: {statuses}")
+	return 0
+
+# Expected Output:
+# Waiting for all tasks to join...
+#    [Task] Fetching ok1.com...
+#    [Task] Fetching fail.com...
+#    [Task] Fetching ok2.com...
+# ERROR: A task failed during join: HttpError(status=500)

@@ -30,7 +30,7 @@ Ryo occupies a unique position, combining the best aspects of several languages:
 | **Type System** | Dynamic typing | Static typing with inference | Ryo: Catch errors at compile time |
 | **Performance** | Interpreted | Compiled to native code | Ryo: 10-100x faster execution |
 | **Memory Management** | Garbage collection | Ownership with borrowing | Ryo: Predictable memory usage, no GC pauses |
-| **Concurrency** | GIL limitations, async/await | Native async/await with true parallelism | Ryo: Better multi-core utilization |
+| **Concurrency** | GIL limitations, async/await | Native Task/Future with true parallelism | Ryo: Better multi-core utilization |
 | **Deployment** | Requires Python runtime | Self-contained binaries | Ryo: Easier deployment |
 
 **Code Example - Error Handling:**
@@ -147,7 +147,7 @@ fn main():
 | **Type System** | Simple but limited | Static with inference and generics | Ryo: More expressive while staying simple |
 | **Error Handling** | `if err != nil` pattern | Error types with `try`/`catch` | Ryo: More ergonomic error handling |
 | **Generics** | Recently added, limited | Designed from the ground up | Ryo: More powerful generic system |
-| **Concurrency** | Goroutines and channels | Async/await with structured concurrency | Both: Excellent, different approaches |
+| **Concurrency** | Goroutines and channels | Task/Future/Channel with structured concurrency | Both: Excellent, similar approaches |
 
 **Code Example - Concurrency:**
 
@@ -172,24 +172,28 @@ func main() {
 
 **Ryo:**
 ```ryo
-async fn fetch_data(url: str) -> str:
+import std.task
+
+fn fetch_data(url: str) -> str:
     # Simulate network request
-    await sleep(100)
+    task.delay(100ms).await
     return f"data from {url}"
 
-async fn main():
-    results = await gather([
-        fetch_data("url1"),
-        fetch_data("url2")
-    ])
-    
+fn main():
+    futures = [
+        task.run: fetch_data("url1"),
+        task.run: fetch_data("url2")
+    ]
+
+    results = task.join(futures).await
+
     for result in results:
         print(result)
 ```
 
 **Migration Path:**
 - Similar philosophy of simplicity
-- Async/await instead of goroutines (familiar to many developers)
+- Task/Future/Channel model similar to Go's goroutines (familiar approach)
 - More expressive type system
 - Similar tooling and package management concepts
 
@@ -263,7 +267,7 @@ async fn main():
 1. **Learn systems concepts:** Understand memory management basics
 2. **Adopt ownership model:** Move from GC to explicit ownership
 3. **Gain performance:** Compiled native code vs. interpreted
-4. **Similar async patterns:** async/await works similarly
+4. **Similar concurrency patterns:** Task/Future works intuitively
 5. **Stronger guarantees:** Types enforced at runtime, not just compile-time
 
 ## Code Examples Comparison
@@ -341,14 +345,15 @@ func main() {
 **Ryo:**
 ```ryo
 import std.http
+import std.task
 
-async fn hello(request: Request) -> Response:
+fn hello(request: Request) -> Response:
     return Response.ok("Hello, World!")
 
-async fn main():
+fn main():
     server = http.Server.new()
     server.route("/", hello)
-    await server.listen(8080)
+    try server.listen(8080).await
 ```
 
 ## Performance Characteristics
@@ -385,6 +390,6 @@ async fn main():
 - Understand systems programming basics
 - Learn ownership and memory management
 - Practice with compiled language workflow
-- Leverage familiar async/await patterns
+- Leverage familiar Task/Future/Channel patterns
 
 This comparison should help you understand where Ryo fits in the programming language ecosystem and provide guidance for transitioning from your current language of choice.

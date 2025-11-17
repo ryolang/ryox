@@ -1,0 +1,42 @@
+# Example 3: Non-Deterministic Waiting with select
+#
+# This example demonstrates the select statement, which waits for
+# the FIRST of multiple concurrent operations to complete.
+#
+# Concepts demonstrated:
+# - select statement for racing multiple operations
+# - Waiting on futures with .await in select
+# - Waiting on channel messages with rx.recv() in select
+# - Using task.delay as a timeout mechanism
+# - Non-deterministic execution order
+
+import std.channel
+import std.task
+import std.io
+import std.time # Assumed module for time constants
+
+fn main():
+	# 1. Setup a future (will resolve in 100ms)
+	result_future = task.run:
+		task.delay(100ms).await
+		return 42
+
+	# 2. Setup a channel (will receive a message after 200ms)
+	tx, rx = std.channel.create[str]()
+	task.spawn:
+		task.delay(200ms).await
+		tx.send("Channel message arrived")
+
+	# The 'select' block waits for the FIRST event
+	select:
+		case let res = result_future.await:
+			io.println(f"Case 1: Future finished first with result: {res}")
+
+		case let msg = rx.recv():
+			io.println(f"Case 2: Channel message: {msg}")
+
+		case task.delay(50ms).await: # 3. A 50ms timeout
+			io.println("Case 3: Timeout occurred first!")
+
+# Expected Output (Case 3 is fastest):
+# Case 3: Timeout occurred first!
