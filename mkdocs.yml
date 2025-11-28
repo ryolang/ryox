@@ -85,8 +85,7 @@ nav:
   - Development:
       - Package Manager: pkg_manager.md
       - Design Issues: design_issues.md
-      - Proposals: proposals.md
-      - Implementation Roadmap: implementation_roadmap.md
+      - Implementation Roadmap: dev/implementation_roadmap.md
       - Development Docs:
           - Project Structure: dev/project_structure.md
           - Token Implementation: dev/token.rs.md

@@ -95,7 +95,7 @@ This roadmap outlines the planned development of the Ryo programming language co
 - ✅ Use `cranelift-object` to write object files (.o on Unix, .obj on Windows)
 - ✅ Update CLI: `ryo run <file.ryo>` compiles and runs code
 - ✅ Add new CLI command: `ryo ir <file.ryo>` displays IR generation info
-- ✅ Implement full linking pipeline with multi-linker fallback (zig cc → clang → cc)
+- ✅ Implement full linking pipeline mandating `zig cc` as the driver (for cross-compilation support)
 - ✅ Comprehensive testing: 15 integration tests for codegen
 
 **Visible Progress:** `ryo run my_program.ryo` executes and exits with specified code ✅ (**Major milestone!**)
@@ -697,7 +697,7 @@ fn main() -> int:
 
 **Tasks:**
 - Add `float` type to lexer/parser/AST
-- Extend type system to handle `int` and `float` separately
+- Extend type system to handle `int` (defaults to `i64`) and `float` separately
 - Add float literal parsing: `3.14`, `2.5`
 - Add comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Add division operator (`/`) with integer division semantics
@@ -1749,6 +1749,9 @@ note: run with `RYOLANG_BACKTRACE=1` for full backtrace
   - `assert_eq(a, b, message)`: Assert equality
   - `assert_ne(a, b, message)`: Assert inequality
   - `assert_error(result, message)`: Assert error returned
+- Add benchmarking support:
+  - `#[bench]` attribute for performance tests
+  - `ryo bench` command to run benchmarks
 - Implement documentation comments:
   - Triple-slash `///` for doc comments
   - Markdown formatting support
@@ -1803,6 +1806,78 @@ Test result: ok. 2 passed; 0 failed
 - Doc comments use **Markdown** (like Rust)
 - Generated docs include trait implementations, method signatures
 - Dependencies: Milestone 25 (assert functions)
+
+### Milestone 26.5: Distribution & Installer
+**Goal:** Zero-friction installation and distribution for v0.1.0 release
+
+**Tasks:**
+
+1. **CI/CD Pipeline:**
+   - Set up GitHub Actions workflow for multi-platform builds
+   - Build static binaries for:
+     - `x86_64-unknown-linux-musl` (Static Linux)
+     - `aarch64-unknown-linux-musl` (Static Linux ARM)
+     - `x86_64-apple-darwin` (macOS Intel)
+     - `aarch64-apple-darwin` (macOS Apple Silicon)
+     - `x86_64-pc-windows-msvc` (Windows)
+   - Automated release artifact creation
+   - Binary signing and checksums
+
+2. **Installation Scripts:**
+   - Write `install.sh` for Unix-like systems:
+     - OS/Architecture detection (Linux/Darwin, AMD64/ARM64)
+     - Download latest `ryo` binary to `~/.ryo/bin/`
+     - Zig dependency check and auto-download to `~/.ryo/tools/zig/`
+     - PATH setup (append to `.zshrc` or `.bashrc`)
+     - Create `~/.ryo/config.toml` with Zig path
+   - Write `install.ps1` for Windows:
+     - Same logic as shell script
+     - Modify User PATH in Registry
+     - Install to `%USERPROFILE%\.ryo\`
+
+3. **Zig Dependency Management:**
+   - Implement logic to fetch Zig from `ziglang.org` JSON index
+   - Version compatibility checking
+   - Fallback to system Zig if available and compatible
+
+4. **Self-Update Command:**
+   - Implement `ryo upgrade` command
+   - Check latest release from GitHub/CDN
+   - Download and replace binary in `~/.ryo/bin/`
+   - Version pinning support (future): `ryo upgrade v0.2.0`
+
+5. **Landing Page:**
+   - Simple static page at `ryolang.org`
+   - Prominent install command: `curl -fsSL https://ryolang.org/install.sh | sh`
+   - Platform-specific instructions
+   - Quick start guide
+
+6. **Testing:**
+   - Test installation on all target platforms
+   - Test upgrade mechanism
+   - Test Zig auto-download
+   - Test PATH setup
+
+**Visible Progress:** Users can install Ryo with a single command on any platform
+
+**Example:**
+```bash
+# Install Ryo
+curl -fsSL https://ryolang.org/install.sh | sh
+
+# Verify installation
+ryo --version
+
+# Update Ryo
+ryo upgrade
+```
+
+**Implementation Notes:**
+- Installation must be **instant, dependency-free, and isolated**
+- Zig dependency managed automatically (users don't need to install it)
+- All files in `~/.ryo/` directory for clean uninstall
+- Windows is a first-class citizen (PowerShell script works seamlessly)
+- Dependencies: Milestone 27 prep work (this enables distribution)
 
 ### Milestone 27: Core Language Complete & v0.1.0 Prep
 **Goal:** Finalize core language, polish, and prepare for v0.1.0 release
@@ -1918,7 +1993,8 @@ Available commands:
 - `task.run`, `task.spawn`, `select`, and `case` keywords
 - `future[T]` type and concurrent runtime
 - Standard library modules (`std.task`, `std.channel`)
-- Single-threaded and multi-threaded executors
+- **Green Threads (M:N)** and **Ambient Runtime** model
+- **Structured Concurrency** (`task.scope`) as the default
 - Cancellation and timeouts via `task.cancel()` and `task.timeout()`
 - Channel-based communication (`sender[T]`, `receiver[T]`)
 
@@ -1953,7 +2029,7 @@ fn main():
 
 **Features:**
 - `extern "C"` function declarations
-- `unsafe` blocks for FFI calls
+- `unsafe` blocks for FFI calls (Requires `kind = "system"` in `ryo.toml`)
 - Automatic binding generation (bindgen-like tool)
 - C struct layout compatibility
 - Callback support (C calling Ryo functions)
