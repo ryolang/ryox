@@ -272,25 +272,27 @@ See Section 7.10 for complete configuration reference.
 
 *   **Tuple Type:** `(T1, T2, ...)`. Literal `(v1, v2, ...)`. Access `.0`, `.1`, etc. Destructuring. *(Rationale: High Pythonic familiarity. Ergonomic for returning multiple values and simple ad-hoc grouping without needing named structs. Note: The unit type is represented by the `void` keyword, not an empty tuple, to avoid syntax ambiguity)*.*
 
-### 4.4 Slice Types (Borrowed Views)
+### 4.4 Slice Types (Scope-Locked Views)
 
+Slices are lightweight borrowed views into owned data. They are **scope-locked** — they exist only within the block where they're created and cannot be stored in variables, returned from functions, or placed in struct fields (see Section 5, Rules 5-6 and Section 5.7).
 
-*   `&str`: Borrowed, immutable UTF-8 view (pointer + byte length). Created via `my_str[start_byte..end_byte]`, `my_str.as_slice()`, or from literals. Lifetime tied to borrowed data.
-*   `&[T]`: Borrowed, immutable slice of `T` elements (pointer + element length). Created via `my_list[start..end]`, `my_list.as_slice()`.
-*   `&mut [T]`: Borrowed, *mutable* slice of `T` elements. Created via `my_mut_list.as_mut_slice()`. Requires `mut` borrow of source.
-*   *(Rationale: `&` syntax leverages borrow concept. No `&mut str` initially simplifies UTF-8 safety. Slices provide efficient read-only/mutable views without copying).*
+*   `str` slice: Immutable UTF-8 view (pointer + byte length). Created via `my_str[start..end]` or string slicing operations.
+*   `list[T]` slice: Immutable view of `T` elements (pointer + element length). Created via `my_list[start..end]`.
+*   `&mut list[T]` slice: Mutable slice passed via explicit `&mut` parameter.
 
-**Function Parameter Note:** When using slice types like `&str` or `&[T]` as function parameters, the `&` is *required* because these are slice types, not owned types. Example:
+**Function parameters use owned types** — the compiler handles borrowing implicitly (Rule 2):
 ```ryo
-fn process_string(s: &str):      # Explicit & required for string slices
-    # ... read s ...
+fn process_string(s: str):        # Implicit immutable borrow
+	# ... read s ...
 
-fn process_list(items: &[int]):  # Explicit & required for list slices
-    # ... read items ...
+fn process_list(items: list[int]):  # Implicit immutable borrow
+	# ... read items ...
 
-fn process_owned(data: MyStruct): # No & needed - implicit immutable borrow
-    # ... read data ...
+fn mutate_list(items: &mut list[int]):  # Explicit mutable borrow
+	# ... modify items ...
 ```
+
+*(Rationale: Under Ownership Lite, borrows are parameter-passing conventions, not general-purpose types. Slices exist for efficient iteration and chaining within a scope, but cannot escape. This eliminates the need for lifetime annotations while preserving zero-copy performance within expression chains.)*
 
 ### 4.5 Struct Type (Product Type)
 
@@ -778,88 +780,326 @@ This unified approach makes `ryo-bindgen` a cornerstone of Ryo's ecosystem, prov
 
 ## 5. Memory Management: "Ownership Lite"
 
-The core principle of Ryo's "Ownership Lite" will be: **Borrow-by-Default for Functions, Move-by-Default for Assignment.** This is the crucial ergonomic trade-off that simplifies the model compared to Rust while maintaining safety.
+Ryo's memory model is designed for one goal: **Rust-level safety without lifetime annotations.** The key insight — inspired by Mojo — is that lifetime annotations only become necessary when borrows escape their immediate scope (returned from functions, stored in structs). By restricting where borrows can exist, Ryo eliminates the need for lifetimes entirely while keeping compile-time safety guarantees.
 
-*   **Core Principle:** Simplified Ownership & Borrowing, inspired by Rust but using Mojo's access-mode mental model.
-*   **No Garbage Collector.** Provides deterministic performance and resource management.
+**Core principle:** Borrow-by-Default for Functions, Move-by-Default for Assignment.
 
-#### 5.1 Value Semantics (Copy) vs. Ownership Semantics (Move)
+*   **No Garbage Collector.** Deterministic performance and resource management.
+*   **No Lifetime Annotations.** Borrows are scoped to function calls — the compiler always knows when they end.
+*   **Clone When Needed.** Returning owned values costs an allocation; the compiler can elide copies when it proves safety. For Ryo's target domains (web backends, CLI tools, scripts), this trade-off is invisible in practice.
+
+### 5.1 Value Semantics (Copy) vs. Ownership Semantics (Move)
 
 *   **Value Types (Copy):** Primitive types (`int`, `float`, `bool`, `char`) and small, user-defined structs (that contain only Copy types) are **copied** on assignment, function call, and return. Ownership is trivial.
 *   **Ownership Types (Move):** Types that manage external resources (e.g., `str`, `list[T]`, `map[K, V]`, and most user-defined structs/enums) are **moved** by default.
 
-#### 5.2 The Three Modes of Data Access (Mojo-Inspired)
+### 5.2 The Three Modes of Data Access
 
-Ryo defines three explicit ways to pass or assign data, which the compiler uses to enforce safety without manual lifetime annotations.
+Ryo defines three explicit ways to pass data into functions. These are **parameter-passing conventions**, not general-purpose type constructors — borrows exist only during a function call and are released when the function returns.
 
-| Mode | Syntax/Keyword | Semantics | Variable State After Operation |
+| Mode | Syntax | Semantics | Caller's Variable After Call |
 | :--- | :--- | :--- | :--- |
-| **1. Ownership Transfer** | `move` keyword on parameter, or implicit on assignment/return | Transfers ownership. The resource is now managed by the new owner. | **Invalidated** (Use-After-Move is a compile error) |
-| **2. Exclusive Mutable Borrow** | `&mut` prefix on type (e.g., `&mut T`, `&mut self`) | Grants a temporary, **exclusive** mutable reference. Prevents all other access until the borrow ends. | **Valid** (Temporarily frozen from move/borrow) |
-| **3. Shared Immutable Borrow** | `&` prefix on type (e.g., `&T`, `&self`) or **Implicit Default** for function parameters | Grants a temporary, **shared** immutable reference. Read-only access. | **Valid** (Temporarily frozen from mutable borrow/move) |
+| **Immutable Borrow** | `data: Type` (implicit) | Read-only access. The default for all parameters. | **Valid** — unchanged |
+| **Mutable Borrow** | `data: &mut Type` (in signature) + `&mut x` (at call site) | Exclusive mutable access. No other borrows allowed simultaneously. | **Valid** — may be modified |
+| **Move** | `move data: Type` (in signature) | Transfers ownership. The function now owns the value. | **Invalidated** — use-after-move is a compile error |
 
-#### 5.3 Formalized Rules
+### 5.3 Formalized Rules
 
-1.  **Assignment & Return (Default: MOVE):**
-    *   For Ownership Types, assignment (`new = old`) and return statements **move** the value, invalidating the original variable (`old`).
-    *   Example: `new_str = old_str` (moves `old_str`)
+#### Rule 1: Assignment and Return Default to MOVE
 
-2.  **Function Parameters (Default: IMMUTABLE BORROW):**
-    *   Function parameters are **implicitly treated as Shared Immutable Borrows (`&Type`)** unless explicitly marked with `&mut` or `move`.
-    *   This is the core ergonomic trade-off: `fn read(data: MyStruct)` is equivalent to `fn read(data: &MyStruct)`.
-    *   The compiler enforces the borrow rule: the argument passed *cannot* be mutated by the function, and the caller's variable remains valid after the call.
+For Ownership Types, assignment and return statements **move** the value, invalidating the original binding.
 
-3.  **Explicit Mutability:**
-    *   **Mutable Variable:** Use `mut` on declaration: `mut my_data = ...`
-    *   **Mutable Parameter:** Use the `&mut` symbol: `fn mutate(data: &mut MyType):` (This replaces the confusing `mut data: Type` syntax from the original spec).
-    *   **Explicit Move Parameter:** Use the `move` keyword: `fn consume(move data: MyType):` (Overrides the implicit borrow default).
+```ryo
+name = "hello"
+other = name       # moves `name` → `other`
+# print(name)      # compile error: `name` was moved
+```
 
-4.  **Borrowing Rules (Compile-Time Enforced):**
-    *   **One Writer OR Many Readers:** At any point, a variable can have *either* one or more Shared Immutable Borrows (`&`) *OR* exactly one Exclusive Mutable Borrow (`&mut`).
-    *   **Lexical Scopes:** Lifetimes are inferred by the compiler based on **lexical scopes**. A borrow cannot outlive the scope of its owner. **No manual lifetime annotations (`'a`) are required.**
+#### Rule 2: Function Parameters Default to IMMUTABLE BORROW
 
-### 5.4 RAII (`Drop` Trait) - The Core of Non-GC Safety
+Function parameters are **implicitly borrowed** — the function gets read-only access, and the caller's variable remains valid. No `&` annotation is needed at the call site or in the signature.
 
-The `Drop` trait is the fundamental mechanism that allows Ryo to manage resources deterministically and avoid a GC.
+```ryo
+fn greet(user: User) -> str:
+	return f"Hello, {user.name}"
 
-*   **Function:** It guarantees that a resource (like a file handle, network socket, or heap memory) is cleaned up *exactly* when its owning variable goes out of scope.
-*   **Safety & Performance:** Without `Drop`, Ryo would have to rely on manual cleanup calls, which are error-prone, or implement a full GC, which violates the "no GC pauses" performance goal.
-*   **Relation to Ownership:** The Move/Borrow model (Ownership Lite) dictates *who* owns the value and *when* that ownership ends (e.g., on scope exit or after a move). The `Drop` trait dictates *what happens* when ownership ends. They work together.
+# At the call site — looks like Python, behaves like an efficient borrow
+greeting = greet(user)    # `user` is borrowed, not moved
+print(user.name)          # still valid
+```
 
-The provided definition is sound:
+This is the core ergonomic trade-off: `fn read(data: MyStruct)` is equivalent to Rust's `fn read(data: &MyStruct)`. The compiler enforces that the function body only reads the parameter.
 
-> `impl Drop for Type: fn drop(self): ...`. Automatic cleanup on scope exit for owned values. Drop order is reverse declaration order within scope.
+#### Rule 3: Mutable Borrows Are Always Explicit
 
-### 5.5 Shared Ownership (`Shared[T]` / ARC) - The Single-Owner Escape Hatch
+Mutation requires `&mut` in **both** the function signature and at the call site. This makes mutation visible during code review — a reader immediately knows "this call changes my variable."
 
-The Move/Borrow model is excellent for hierarchical, tree-like data structures where a single owner is clear. However, it cannot safely handle two common scenarios:
+```ryo
+fn add_bonus(scores: &mut list[int], bonus: int):
+	for i in 0..len(scores):
+		scores[i] += bonus
 
-1.  **Graph/Cyclic Data:** Structures like doubly linked lists or general graph data where nodes must reference each other, creating cycles that violate the single-owner rule.
-2.  **Shared State:** Intentional sharing of a resource among multiple, independent entities (e.g., a configuration object accessed by multiple worker threads).
+fn main():
+	mut scores = [90, 85, 95]
+	add_bonus(&mut scores, 5)    # explicit: scores changes here
+	print(scores)                # [95, 90, 100]
+```
 
-*   **Function:** `Shared[T]` (Atomic Reference Counted pointer) allows multiple "owners" to safely access the same data. The data is only dropped when the last `Shared[T]` reference is released. `Weak[T]` breaks cycles.
-*   **Safety:** By making this mechanism explicit, Ryo retains its safety guarantee. The developer must opt-in to the overhead and understand the shared nature of the data, rather than having it happen implicitly (like in a GC language).
-*   **Relation to Ownership:** When a value is wrapped in `Shared[T]`, the `Shared[T]` container becomes the new single owner, and the value inside is governed by the container's reference count.
+*(Rationale: "Read is implicit, Write is explicit." Immutable borrows are the common case and should be frictionless. Mutable borrows are the exception and should be visible.)*
 
-The provided definition is sound:
+#### Rule 4: Move Parameters Override the Default
 
-> `Shared[T]` (ARC) / `Weak[T]` provided in stdlib... for opt-in shared ownership and cycle breaking. API uses dot notation... *(Rationale: Provides necessary mechanism... while making the associated overhead (ARC) explicit).*
+Use `move` to transfer ownership into a function. The caller's variable is invalidated after the call.
 
-### Summary
+```ryo
+fn consume(move data: str):
+	print(f"Got: {data}")
+	# `data` is dropped when `consume` returns
 
-The Ryo Ownership Model is a three-layered system:
+fn main():
+	message = "hello"
+	consume(message)     # `message` moved into `consume`
+	# print(message)     # compile error: `message` was moved
+```
 
-1.  **Layer 1 (The Core):** **Move/Borrow/Exclusive Access** (The Mojo-inspired rules) - *Governs how data can be accessed and transferred.*
-2.  **Layer 2 (Resource Cleanup):** **RAII/Drop** - *Governs what happens when data ownership ends.*
-3.  **Layer 3 (The Escape Hatch):** **Shared[T]/Weak[T]** - *Governs how to handle multi-owner scenarios safely.*
+#### Rule 5: Functions Cannot Return Borrows
 
-All three layers are required for Ryo to successfully deliver on its vision.
+**Functions always return owned values.** A return type cannot be `&T`, `&mut T`, `&str`, or `&[T]`. This is the rule that eliminates lifetime annotations — if borrows never escape a function, the compiler always knows exactly when they end.
+
+```ryo
+# NOT allowed — returning a borrow requires lifetime tracking
+fn longest(a: str, b: str) -> &str:     # compile error
+	if len(a) > len(b): return a
+	return b
+
+# The Ryo way — return owned values
+fn longest(a: str, b: str) -> str:
+	if len(a) > len(b): return a.clone()
+	return b.clone()
+```
+
+**Why this works for Ryo's audience:** Python always returns owned values. The mental model is identical. The compiler can apply copy elision to avoid unnecessary allocations when it proves the original is no longer used.
+
+**Exception — method views:** Methods on `self` may return lightweight views (e.g., iterating over a collection) that are implicitly tied to `self`'s scope. These views cannot be stored or returned — they exist only within the expression or block where they're used. See section 5.7 for details.
+
+#### Rule 6: Structs Cannot Contain References
+
+Struct fields must be **owned values**, `Shared[T]`, or IDs — never `&T`. This eliminates the need for lifetime parameters on types.
+
+```ryo
+# NOT allowed — reference fields need lifetime tracking
+struct Parser:
+	source: &str        # compile error: struct fields must be owned
+
+# The Ryo way — own the data
+struct Parser:
+	source: str         # owns a copy of the source
+	position: int
+
+# For shared access — use Shared[T]
+struct Worker:
+	config: Shared[Config]    # reference-counted, explicit opt-in
+
+# For relationships — use IDs (especially in data-heavy domains)
+struct Order:
+	user_id: int        # references User by ID, not by pointer
+	total: float
+```
+
+*(Rationale: Structs with reference fields are the primary source of lifetime annotation complexity in Rust. By requiring owned fields, Ryo eliminates `struct Foo<'a>` entirely. For Ryo's target domains — web backends, CLI tools — this matches how data naturally flows: structs own their data, relationships use IDs or shared pointers.)*
+
+#### Rule 7: Borrowing Rules (Compile-Time Enforced)
+
+*   **One Writer OR Many Readers:** At any point, a value can have *either* one or more immutable borrows *OR* exactly one mutable borrow (`&mut`). Never both.
+*   **Borrows Are Scoped to Calls:** A borrow begins when a function is called and ends when it returns. Because borrows can't be stored or returned (Rules 5 and 6), the compiler always knows the exact scope.
+
+```ryo
+fn main():
+	mut data = [1, 2, 3]
+
+	# Many readers — fine
+	a = sum(data)         # immutable borrow, released on return
+	b = len(data)         # immutable borrow, released on return
+
+	# One writer — fine
+	add_bonus(&mut data, 10)  # exclusive mutable borrow
+
+	# Writer + reader — compile error
+	# (Not possible in sequential code due to call scoping,
+	#  but enforced in concurrent contexts — see Concurrency section)
+```
+
+### 5.4 RAII (`Drop` Trait) — Deterministic Cleanup
+
+The `Drop` trait guarantees that resources (file handles, network sockets, heap memory) are cleaned up *exactly* when their owning variable goes out of scope.
+
+```ryo
+impl Drop for Connection:
+	fn drop(self):
+		self.close()
+
+fn handle():
+	conn = Connection.open("db://...")
+	# use conn...
+# conn.drop() called automatically here — deterministic, no GC
+```
+
+*   **Drop order** is reverse declaration order within a scope.
+*   **Relation to Ownership:** The Move/Borrow model dictates *who* owns the value and *when* ownership ends. The `Drop` trait dictates *what happens* when ownership ends. They work together.
+
+### 5.5 `with` — Resource Lifetime Blocks
+
+For resources that need explicit lifetime boundaries — database connections, file handles, temporary buffers — Ryo provides `with` blocks. Identical to Python's `with` statement in syntax and intent, but backed by the ownership system and `Drop` trait rather than context managers.
+
+A `with` block guarantees cleanup on exit, whether the block completes normally, returns early, or propagates an error.
+
+```ryo
+fn handle_request(req: Request) -> Error!Response:
+	with Database.connect("postgres://...") as db:
+		user = db.query(User, id=req.user_id)
+		Response(data=user.to_json())
+	# db is closed here — always, even if query returned an error
+```
+
+**Nested resources:**
+
+```ryo
+fn migrate():
+	with Database.connect(SOURCE_URL) as source:
+		with Database.connect(TARGET_URL) as target:
+			for record in source.read_all(Users):
+				target.insert(Users, record)
+		# target closed
+	# source closed
+```
+
+**Pool checkout — same keyword, different cleanup:**
+
+`with` works with any type that implements `Drop`. For pool-managed resources, `Drop` returns the resource to the pool instead of closing it. No special keyword needed — the cleanup behavior is in the type, not the syntax.
+
+```ryo
+fn get_user(id: int) -> Error!User:
+	with db_pool.acquire() as conn:          # checks out from pool
+		conn.query(User, id=id)
+	# conn returned to pool here (Drop returns it, not closes it)
+
+fn read_file(path: str) -> Error!str:
+	with File.open(path) as f:               # opens a file handle
+		f.read()
+	# f closed here (Drop closes it)
+
+fn update_count(counter: &mut Mutex[int]):
+	with counter.lock() as guard:            # acquires the lock
+		guard.value += 1
+	# lock released here (Drop releases it)
+```
+
+*(Rationale: Python developers already understand `with` blocks for resource management. Using the same keyword and the same `with EXPR as NAME:` syntax means zero learning curve. One keyword, one mechanism (RAII/Drop), many behaviors — determined by the type, not the syntax. Pools, locks, files, and connections all use the same pattern.)*
+
+### 5.6 Shared Ownership (`Shared[T]` / ARC)
+
+The Move/Borrow model handles tree-shaped data well, but some patterns need shared access:
+
+1.  **Graph/Cyclic Data:** Nodes referencing each other.
+2.  **Shared State:** A configuration object accessed by multiple concurrent tasks.
+3.  **Long-Lived Resources:** State shared across route handlers in a web server.
+
+`Shared[T]` (Atomic Reference Counted pointer) allows multiple owners. The data is dropped when the last reference is released. `Weak[T]` breaks reference cycles.
+
+```ryo
+# Shared config across route handlers
+fn setup_server():
+	config = Shared(load_config())
+
+	router.get("/users", fn(req):
+		# Each handler holds a Shared reference — not a borrow
+		settings = config.get()
+		return handle_users(req, settings)
+	)
+
+	router.get("/orders", fn(req):
+		settings = config.get()
+		return handle_orders(req, settings)
+	)
+```
+
+*   `Shared[T]` is **explicit opt-in** — the developer acknowledges the ARC overhead.
+*   `Shared[T]` is a **normal owned type** — it can be stored in struct fields, returned from functions, and moved between scopes. The inner `T` is accessed through the container.
+
+*(Rationale: In Ryo's target domains, `Shared[T]` is common in server code — shared DB pools, shared configuration, shared caches. It is not an "escape hatch" to be avoided; it is the idiomatic tool for shared state. The key is that it's explicit: the type signature tells the reviewer "this data is shared.")*
+
+### 5.7 Iterators and Views
+
+Iterators are the one place where a "borrowed view" must exist beyond a single function call — an iterator borrows from a collection for the duration of a loop. Ryo handles this with **scope-locked views**: views that the compiler guarantees cannot escape their enclosing block.
+
+```ryo
+fn process(items: list[int]):
+	# The iterator borrows `items` for the duration of the loop
+	for item in items:
+		print(item)
+	# borrow released — `items` is accessible again
+
+	# Chained operations — the entire chain is scope-locked
+	result = items.iter().filter(fn(x): x > 10).map(fn(x): x * 2).collect()
+	# result is an owned list[int] — the iterator chain is gone
+```
+
+**Rules for scope-locked views:**
+
+*   Views **cannot be stored** in variables that outlive the current block.
+*   Views **cannot be returned** from functions (follows Rule 5).
+*   Views **cannot be passed to other functions** that would store them.
+*   The compiler enforces that the source collection is not mutated while a view exists (follows Rule 7).
+
+```ryo
+# NOT allowed — storing an iterator escapes the borrow scope
+fn get_evens(items: list[int]):
+	evens = items.iter().filter(fn(x): x % 2 == 0)
+	return evens     # compile error: cannot return a view
+
+# The Ryo way — collect into an owned value
+fn get_evens(items: list[int]) -> list[int]:
+	return items.iter().filter(fn(x): x % 2 == 0).collect()
+```
+
+*(Rationale: Lazy iterators are important for performance in chains like `filter -> map -> collect`. By scope-locking them, Ryo gets the performance benefit without lifetime annotations. The compiler can verify safety using the same lexical scope analysis used for function borrows — no new mechanism needed.)*
+
+### 5.8 Summary
+
+The Ryo Ownership Model is a four-layered system:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Layer 4: Shared[T] / Weak[T]                       │
+│  For multi-owner scenarios (shared state, graphs)    │
+├─────────────────────────────────────────────────────┤
+│  Layer 3: with blocks                                │
+│  Explicit resource lifetime boundaries               │
+│  One keyword, many behaviors (Drop determines how)   │
+├─────────────────────────────────────────────────────┤
+│  Layer 2: RAII / Drop                                │
+│  Deterministic cleanup when ownership ends           │
+├─────────────────────────────────────────────────────┤
+│  Layer 1: Move / Borrow / Exclusive Access           │
+│  Governs how data is accessed and transferred        │
+│                                                      │
+│  Key restrictions that eliminate lifetime annotations:│
+│  - Borrows are parameter conventions, not types      │
+│  - Functions cannot return borrows (Rule 5)          │
+│  - Structs cannot contain references (Rule 6)        │
+│  - Iterators are scope-locked views (Section 5.7)    │
+└─────────────────────────────────────────────────────┘
+```
+
+**The trade-off, stated honestly:** Ryo trades zero-copy flexibility for zero-annotation simplicity. Code that Rust would express as a returned `&str` slice, Ryo expresses as a cloned `str`. The compiler applies copy elision where it can. For web backends, CLI tools, and scripts, this cost is negligible. For performance-critical inner loops, `unsafe` blocks (restricted to system packages) provide an escape hatch to raw pointers.
+
+All four layers work together to deliver Ryo's promise: **memory safety that feels like Python.**
 
 ## 6. Functions & Closures
 
 ### 6.1 Functions & Methods
 
-*   **Functions/Methods:** Standard definition/call. Return single value (can be tuple). Methods use `&self` (immutable borrow), `&mut self` (mutable borrow), or `self` (take ownership).
+*   **Functions/Methods:** Standard definition/call. Return single value (can be tuple). Methods use `self` (implicit immutable borrow, consistent with Rule 2), `&mut self` (explicit mutable borrow), or `move self` (take ownership).
 
 ### 6.2 Closures & Lambda Expressions
 
@@ -974,7 +1214,7 @@ result = apply(5, fn(n): n * 2)  # 10
 **Type inference:** When the parameter type is clear from context, closure argument types can often be inferred:
 
 ```ryo
-fn map(items: &[int], transform: fn(int) -> int) -> list[int]:
+fn map(items: list[int], transform: fn(int) -> int) -> list[int]:
 	mut result = list[int]()
 	for item in items:
 		result.append(transform(item))
@@ -990,7 +1230,7 @@ doubled = map([1, 2, 3], fn(x): x * 2)
 **Example 1: Higher-order functions (map/filter)**
 
 ```ryo
-fn filter(items: &[int], predicate: fn(int) -> bool) -> list[int]:
+fn filter(items: list[int], predicate: fn(int) -> bool) -> list[int]:
 	mut result = list[int]()
 	for item in items:
 		if predicate(item):
@@ -1005,7 +1245,7 @@ evens = filter(numbers, fn(x): x % 2 == 0)
 **Example 2: Closures with error handling**
 
 ```ryo
-fn process_items(items: &[int], handler: fn(int) -> !void) -> !void:
+fn process_items(items: list[int], handler: fn(int) -> !void) -> !void:
 	for item in items:
 		try handler(item)
 	return void
