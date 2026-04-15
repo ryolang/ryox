@@ -907,7 +907,7 @@ fn longest(a: str, b: str) -> str:
 
 #### Rule 6: Structs Cannot Contain References
 
-Struct fields must be **owned values**, `Shared[T]`, or IDs — never `&T`. This eliminates the need for lifetime parameters on types.
+Struct fields must be **owned values**, `shared[T]`, or IDs — never `&T`. This eliminates the need for lifetime parameters on types.
 
 ```ryo
 # NOT allowed — reference fields need lifetime tracking
@@ -919,9 +919,9 @@ struct Parser:
 	source: str         # owns a copy of the source
 	position: int
 
-# For shared access — use Shared[T]
+# For shared access — use shared[T]
 struct Worker:
-	config: Shared[Config]    # reference-counted, explicit opt-in
+	config: shared[Config]    # reference-counted, explicit opt-in
 
 # For relationships — use IDs (especially in data-heavy domains)
 struct Order:
@@ -1011,7 +1011,7 @@ fn read_file(path: str) -> Error!str:
 		f.read()
 	# f closed here (Drop closes it)
 
-fn update_count(counter: &mut Mutex[int]):
+fn update_count(counter: &mut mutex[int]):
 	with counter.lock() as guard:            # acquires the lock
 		guard.value += 1
 	# lock released here (Drop releases it)
@@ -1019,7 +1019,7 @@ fn update_count(counter: &mut Mutex[int]):
 
 *(Rationale: Python developers already understand `with` blocks for resource management. Using the same keyword and the same `with EXPR as NAME:` syntax means zero learning curve. One keyword, one mechanism (RAII/Drop), many behaviors — determined by the type, not the syntax. Pools, locks, files, and connections all use the same pattern.)*
 
-### 5.6 Shared Ownership (`Shared[T]` / ARC)
+### 5.6 Shared Ownership (`shared[T]` / ARC)
 
 The Move/Borrow model handles tree-shaped data well, but some patterns need shared access:
 
@@ -1027,15 +1027,15 @@ The Move/Borrow model handles tree-shaped data well, but some patterns need shar
 2.  **Shared State:** A configuration object accessed by multiple concurrent tasks.
 3.  **Long-Lived Resources:** State shared across route handlers in a web server.
 
-`Shared[T]` (Atomic Reference Counted pointer) allows multiple owners. The data is dropped when the last reference is released. `Weak[T]` breaks reference cycles.
+`shared[T]` (Atomic Reference Counted pointer) allows multiple owners. The data is dropped when the last reference is released. `weak[T]` breaks reference cycles.
 
 ```ryo
 # Shared config across route handlers
 fn setup_server():
-	config = Shared(load_config())
+	config = shared(load_config())
 
 	router.get("/users", fn(req):
-		# Each handler holds a Shared reference — not a borrow
+		# Each handler holds a shared reference — not a borrow
 		settings = config.get()
 		return handle_users(req, settings)
 	)
@@ -1046,10 +1046,10 @@ fn setup_server():
 	)
 ```
 
-*   `Shared[T]` is **explicit opt-in** — the developer acknowledges the ARC overhead.
-*   `Shared[T]` is a **normal owned type** — it can be stored in struct fields, returned from functions, and moved between scopes. The inner `T` is accessed through the container.
+*   `shared[T]` is **explicit opt-in** — the developer acknowledges the ARC overhead.
+*   `shared[T]` is a **normal owned type** — it can be stored in struct fields, returned from functions, and moved between scopes. The inner `T` is accessed through the container.
 
-*(Rationale: In Ryo's target domains, `Shared[T]` is common in server code — shared DB pools, shared configuration, shared caches. It is not an "escape hatch" to be avoided; it is the idiomatic tool for shared state. The key is that it's explicit: the type signature tells the reviewer "this data is shared.")*
+*(Rationale: In Ryo's target domains, `shared[T]` is common in server code — shared DB pools, shared configuration, shared caches. It is not an "escape hatch" to be avoided; it is the idiomatic tool for shared state. The key is that it's explicit: the type signature tells the reviewer "this data is shared.")*
 
 ### 5.7 Iterators and Views
 
@@ -1093,7 +1093,7 @@ The Ryo Ownership Model is a four-layered system:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Layer 4: Shared[T] / Weak[T]                       │
+│  Layer 4: shared[T] / weak[T]                       │
 │  For multi-owner scenarios (shared state, graphs)    │
 ├─────────────────────────────────────────────────────┤
 │  Layer 3: with blocks                                │
@@ -1186,6 +1186,8 @@ greeter = move fn(): f"Hello, {name}"
 # name is now moved - cannot be used here
 print(greeter())  # "Hello, Alice"
 ```
+
+> **Task closures:** Closures passed to `task.run`, `task.scope`, or `task.spawn_detached` implicitly capture by move — no `move` keyword needed. The compiler enforces this because tasks may outlive the spawning scope. To share data across tasks, clone a `shared[T]` handle before the closure. Writing `move` explicitly on a task closure is accepted but redundant.
 
 **3. Mutable Capture (Inferred)**
 
