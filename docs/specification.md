@@ -2015,12 +2015,12 @@ Tasks are Ryo's lightweight, non-OS-thread concurrency unit (like Go's goroutine
 
 | Primitive | Ryo Syntax | Type Signature | Semantics |
 | :--- | :--- | :--- | :--- |
-| **Run** | `task.run(fn): ...` | `fn(f: fn() -> T) -> future[T]` | Executes `f` on a green thread. Returns a **`future[T]`** to retrieve the result. |
-| **Spawn** | `task.spawn(fn): ...` | `fn(f: fn() -> void) -> void` | **Fire-and-forget**. Executes `f` on a green thread. Returns immediately. |
-| **Scope** | `task.scope(fn): ...` | `fn` | **Structured Concurrency**. Creates a scope where spawned tasks must complete before the scope exits. **Recommended default.** |
+| **Run** | `task.run: ...` | `fn(f: fn() -> T) -> future[T]` | Executes `f` on a green thread. Returns a **`future[T]`** to retrieve the result. **Dropping the future cancels the task.** |
+| **Scope** | `task.scope: ...` | `fn` | **Structured Concurrency**. Creates a scope where all child tasks must complete before the scope exits. **Recommended default.** |
+| **Spawn Detached** | `task.spawn_detached: ...` | `fn(f: fn() -> void) -> void` | **Fire-and-forget (explicit opt-out)**. No future returned. Errors are logged to stderr. Cancelled on process exit. |
 | **Await** | `fut.await` | **`future[T]`** | **Suspends the current green thread** until the value is ready. Does NOT block the OS thread. |
 
-**Ownership Safety:** All data passed into tasks is **moved** by default.
+**Ownership Safety:** Task closures implicitly capture by **move** — the compiler enforces this because tasks may outlive the spawning scope (see §6.2.2). To share data across tasks, use `shared[T]` with `.clone()`.
 **FFI Warning:** Calling blocking C functions (like `sleep`) will block the underlying OS thread. Use `#[blocking]` attribute on FFI imports to hint the runtime to spawn a dedicated thread.
 
 #### 9.2.2 Channels (Communication and Synchronization)
@@ -2034,15 +2034,16 @@ Channels are the idiomatic, memory-safe way to communicate and synchronize betwe
 | **Receive** | `rx.recv()` | **Suspends task** until message available. Returns received value. |
 
 #### 9.2.4 Shared State
-For shared mutable state, Ryo uses the `Shared[Mutex[T]]` pattern:
-*   `Shared[T]`: Reference counting (ARC).
-*   `Mutex[T]`: Interior mutability with locking.
-*   **Deadlock Safety:** Ryo's Mutex is designed to detect deadlocks in debug mode where possible.
+For shared mutable state, Ryo uses the `shared[mutex[T]]` pattern:
+*   `shared[T]`: Reference counting (ARC).
+*   `mutex[T]`: Interior mutability with locking.
+*   **Deadlock Safety:** Ryo's mutex is designed to detect deadlocks in debug mode where possible.
 ```ryo
-state = Shared(Mutex(0))
-task.spawn:
+state = shared(mutex(0))
+worker = task.run:
     lock = state.lock()
     *lock += 1
+result = worker.await
 ```
 
 #### 9.2.3 Error Integration
@@ -2064,16 +2065,18 @@ The `future` type integrates seamlessly with Ryo's error system, using the corre
 
 #### 9.3.1 Non-Deterministic Waiting (`select`)
 
-`select` is a structural keyword for waiting on multiple, mixed concurrency primitives.
+`select` is a structural keyword for waiting on multiple, mixed concurrency primitives. The first event to fire wins; all other operations are cancelled (see Cancel Safety in §14.5.5).
 
 ```ryo
 select:
-    case let res = fut.await:          # Wait for a future
-        # ...
-    case let msg = rx.recv():          # Wait for a channel message
-        # ...
-    case task.delay(10s).await:        # Wait for a timeout
-        # ...
+    case res = fut.await:              # Wait for a future
+        handle(res)
+    case msg = rx.recv():             # Wait for a channel message
+        handle(msg)
+    case task.delay(10s).await:       # Wait for a timeout
+        print("timed out")
+    default:                           # Non-blocking: if nothing is ready
+        print("nothing ready")
 ```
 
 #### 9.3.2 Task Grouping and Management
@@ -2086,7 +2089,6 @@ select:
 | **Delay** | `task.delay(duration)` | `fn(duration) -> future[void]` | **Suspends the current task** for the specified duration. |
 | **Timeout** | `task.timeout(duration, fut)` | `fn(duration, future[!T]) -> future[!T]` | Fails with a `Timeout` error if the future does not complete in time. |
 | **Cancel** | `fut.cancel()` | `fn(future[T]) -> void` | Attempts to stop the associated task. |
-| **Group** | `task.group().spawn(fn)` | `struct task_group` | Manages the lifetime of child tasks (RAII-based scoping). |
 
 ### 9.4 Example
 
