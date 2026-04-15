@@ -2090,38 +2090,81 @@ select:
 | **Timeout** | `task.timeout(duration, fut)` | `fn(duration, future[!T]) -> future[!T]` | Fails with a `Timeout` error if the future does not complete in time. |
 | **Cancel** | `fut.cancel()` | `fn(future[T]) -> void` | Attempts to stop the associated task. |
 
-### 9.4 Example
+### 9.4 Examples
 
-Basic concurrent task execution:
+#### Basic Task Execution
 
 ```ryo
 import std.io
 import std.task
 
 fn calculate_sum(a: int, b: int) -> int:
-    task.delay(100ms).await
-    return a + b
+	task.delay(100ms).await
+	return a + b
 
 fn main():
-    # Fire-and-forget task
-    task.spawn:
-        io.println("Background task running")
+	# task.run returns a future — dropping it cancels the task
+	sum_future = task.run:
+		return calculate_sum(10, 20)
 
-    # Task that returns a future
-    sum_future = task.run:
-        return calculate_sum(10, 20)
-
-    result = sum_future.await
-    io.println(f"Result: {result}")
+	result = sum_future.await
+	io.println(f"Result: {result}")
 ```
 
-*   *(Rationale: Task/Future/Channel eliminates function coloring while providing safe, ergonomic concurrency. Channels provide CSP-style communication without requiring special syntax. The model is familiar to Go developers while maintaining Ryo's ownership safety. No async/await keywords simplifies the language and removes the sync/async divide).*
+#### Structured Concurrency with `task.scope`
 
-*   **See Examples:** Complete examples demonstrating task execution, channel communication, select statements, and task coordination can be found in:
-    *   `examples/task_spawn_run.ryo` - Basic task execution
-    *   `examples/channel_communication.ryo` - Safe message passing
-    *   `examples/select_example.ryo` - Non-deterministic waiting
-    *   `examples/task_join.ryo` - Task coordination with error handling
+```ryo
+import std.io
+import std.task
+
+fn main():
+	# All tasks inside the scope must complete before scope exits
+	task.scope:
+		f1 = task.run: calculate_sum(10, 20)
+		f2 = task.run: calculate_sum(30, 40)
+		io.println(f"Results: {f1.await}, {f2.await}")
+	# Both tasks guaranteed complete here
+```
+
+#### Fire-and-Forget (Explicit Opt-Out)
+
+```ryo
+import std.io
+import std.task
+
+fn main():
+	# task.spawn_detached: no future, no error propagation
+	# Use only when you genuinely don't need the result
+	task.spawn_detached:
+		io.println("Background logging task")
+	
+	io.println("Main continues immediately")
+	# Note: detached tasks are cancelled when main() returns
+```
+
+#### Non-Deterministic Waiting with `select`
+
+```ryo
+import std.io
+import std.task
+import std.channel
+
+fn main():
+	tx, rx = std.channel.create[str]()
+	sender = task.run:
+		task.delay(200ms).await
+		tx.send("hello")
+
+	select:
+		case msg = rx.recv():
+			io.println(f"Got: {msg}")
+		case task.delay(100ms).await:
+			io.println("Timed out")
+		default:
+			io.println("Nothing ready (non-blocking)")
+```
+
+*   *(Rationale: Task/Future/Channel eliminates function coloring while providing safe, ergonomic concurrency. Dropping a future cancels the task, making structured concurrency the natural default. `task.spawn_detached` exists for the rare fire-and-forget case. No async/await keywords simplifies the language and removes the sync/async divide).*
 
 ## 10. Compile-Time Execution (`comptime`)
 
