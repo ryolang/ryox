@@ -74,7 +74,7 @@ pub enum Token<'a> {
     Dedent,
 
     // Comments (skip to end of line)
-    #[regex(r"#[^\n]*", logos::skip)]
+    #[regex(r"#[^\n]*", logos::skip, allow_greedy = true)]
     Comment,
 
     // Whitespace (skip inline whitespace only, newlines handled separately)
