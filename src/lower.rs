@@ -416,4 +416,78 @@ mod tests {
             _ => panic!("Expected VarDecl"),
         }
     }
+
+    #[test]
+    fn lower_explicit_main() {
+        let hir = parse_and_lower("fn main() -> int:\n\treturn 0\n").unwrap();
+        assert_eq!(hir.functions.len(), 1);
+        let main = &hir.functions[0];
+        assert_eq!(main.name, "main");
+        assert_eq!(main.return_type, Type::Int);
+        assert_eq!(main.body.len(), 1);
+        assert!(matches!(main.body[0], HirStmt::Return(Some(_), _)));
+    }
+
+    #[test]
+    fn lower_explicit_main_with_top_level_error() {
+        let result = parse_and_lower("x = 42\n\nfn main() -> int:\n\treturn 0\n");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Top-level statements"));
+    }
+
+    #[test]
+    fn lower_two_functions() {
+        let code = "fn add(a: int, b: int) -> int:\n\treturn a + b\n\nfn main() -> int:\n\treturn add(2, 3)\n";
+        let hir = parse_and_lower(code).unwrap();
+        assert_eq!(hir.functions.len(), 2);
+
+        let add = hir.functions.iter().find(|f| f.name == "add").unwrap();
+        assert_eq!(add.params.len(), 2);
+        assert_eq!(add.params[0].name, "a");
+        assert_eq!(add.params[0].ty, Type::Int);
+        assert_eq!(add.params[1].name, "b");
+        assert_eq!(add.params[1].ty, Type::Int);
+        assert_eq!(add.return_type, Type::Int);
+
+        let main = hir.functions.iter().find(|f| f.name == "main").unwrap();
+        assert_eq!(main.return_type, Type::Int);
+    }
+
+    #[test]
+    fn lower_function_call_type_resolved() {
+        let code =
+            "fn double(x: int) -> int:\n\treturn x * 2\n\nfn main() -> int:\n\treturn double(3)\n";
+        let hir = parse_and_lower(code).unwrap();
+        let main = hir.functions.iter().find(|f| f.name == "main").unwrap();
+        match &main.body[0] {
+            HirStmt::Return(Some(expr), _) => {
+                assert_eq!(expr.ty, Type::Int);
+                assert!(matches!(expr.kind, HirExprKind::Call(_, _)));
+            }
+            _ => panic!("Expected Return with Call"),
+        }
+    }
+
+    #[test]
+    fn lower_void_function() {
+        let code = "fn greet():\n\tprint(\"hi\")\n\nfn main() -> int:\n\tgreet()\n\treturn 0\n";
+        let hir = parse_and_lower(code).unwrap();
+        let greet = hir.functions.iter().find(|f| f.name == "greet").unwrap();
+        assert_eq!(greet.return_type, Type::Void);
+    }
+
+    #[test]
+    fn lower_print_expression_statement() {
+        let hir = parse_and_lower("msg = print(\"Hello\\n\")").unwrap();
+        let main = &hir.functions[0];
+        match &main.body[0] {
+            HirStmt::VarDecl {
+                initializer, ty, ..
+            } => {
+                assert_eq!(*ty, Type::Int);
+                assert!(matches!(initializer.kind, HirExprKind::Call(_, _)));
+            }
+            _ => panic!("Expected VarDecl"),
+        }
+    }
 }
