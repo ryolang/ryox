@@ -580,58 +580,33 @@ The linker:
 4. Creates executable file format
 5. Sets proper permissions
 
-### Multi-Linker Fallback Strategy
+### Managed Zig Toolchain
 
-Ryo tries linkers in this order:
+Ryo uses a managed Zig installation as its sole linker. The toolchain is automatically downloaded on first use and stored in `~/.ryo/toolchain/zig-{version}/`. This ensures consistent linking behavior across all platforms and eliminates the need for users to manually install a linker.
 
 ```rust
 fn link_executable(obj_file: &str, exe_file: &str) -> Result<(), CompilerError> {
-    let linkers = vec!["zig cc", "clang", "cc"];
+    let zig_path = toolchain::ensure_zig()?;  // Downloads Zig if not present
 
-    for linker in linkers {
-        let parts: Vec<&str> = linker.split_whitespace().collect();
-        let output = if parts.len() > 1 {
-            Command::new(parts[0])
-                .arg(parts[1])
-                .arg("-o").arg(exe_file)
-                .arg(obj_file)
-                .output()
-        } else {
-            Command::new(linker)
-                .arg("-o").arg(exe_file)
-                .arg(obj_file)
-                .output()
-        };
+    let output = Command::new(&zig_path)
+        .args(["cc", "-o", exe_file, obj_file])
+        .output()
+        .map_err(|e| CompilerError::LinkError(format!("Failed to run zig cc: {e}")))?;
 
-        match output {
-            Ok(output) if output.status.success() => {
-                println!("Linked with {}: {}", linker, exe_file);
-                return Ok(());
-            }
-            _ => continue,  // Try next linker
-        }
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(CompilerError::LinkError(format!("zig cc failed: {stderr}")))
     }
-
-    Err(CompilerError::LinkError("No linker found".into()))
 }
 ```
 
-**Linker Priority Rationale:**
-
-1. **zig cc** (preferred)
-   - Best cross-compilation support
-   - Ships with libc for all targets
-   - Handles platform differences automatically
-
-2. **clang** (good alternative)
-   - Modern, widely available
-   - Good error messages
-   - LLVM-based toolchain
-
-3. **cc** (system default)
-   - Always present on Unix systems
-   - May be gcc, clang, or other
-   - Fallback for maximum compatibility
+**Why Zig?**
+- Ships with libc for all targets — no system dependencies needed
+- Excellent cross-compilation support
+- Handles platform differences automatically
+- Single toolchain for macOS (aarch64, x86_64) and Linux (aarch64, x86_64)
 
 ### Linking Process
 
@@ -691,7 +666,8 @@ zig cc -o first.exe first.obj
 ### Code Reference
 
 - **Linking function:** `src/linker.rs::link_executable`
-- **CLI integration:** `src/pipeline.rs::compile_program`
+- **Toolchain management:** `src/toolchain.rs::ensure_zig`
+- **CLI integration:** `src/pipeline.rs::build_file`
 
 ---
 
@@ -900,8 +876,8 @@ xxd program.o | less  # Hex dump
 ### Debug Linking
 
 ```bash
-# See what linker is doing
-zig cc -v -o program program.o
+# See what linker is doing (find path via `ryo toolchain status`)
+~/.ryo/toolchain/zig-<version>/zig cc -v -o program program.o
 ```
 
 ### Debug Execution

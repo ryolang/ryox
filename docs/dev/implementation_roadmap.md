@@ -1837,18 +1837,15 @@ Test result: ok. 2 passed; 0 failed
    - Write `install.sh` for Unix-like systems:
      - OS/Architecture detection (Linux/Darwin, AMD64/ARM64)
      - Download latest `ryo` binary to `~/.ryo/bin/`
-     - Zig dependency check and auto-download to `~/.ryo/tools/zig/`
      - PATH setup (append to `.zshrc` or `.bashrc`)
-     - Create `~/.ryo/config.toml` with Zig path
    - Write `install.ps1` for Windows:
      - Same logic as shell script
      - Modify User PATH in Registry
      - Install to `%USERPROFILE%\.ryo\`
 
-3. **Zig Dependency Management:**
-   - Implement logic to fetch Zig from `ziglang.org` JSON index
-   - Version compatibility checking
-   - Fallback to system Zig if available and compatible
+3. **Zig Dependency Management:** ✅ Implemented in `src/toolchain.rs`
+   - Auto-downloads pinned Zig version on first use to `~/.ryo/toolchain/zig-{version}/`
+   - No system Zig dependency — fully managed by the compiler
 
 4. **Self-Update Command:**
    - Implement `ryo upgrade` command

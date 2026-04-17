@@ -6,6 +6,7 @@ pub enum CompilerError {
     LowerError(String),
     CodegenError(String),
     LinkError(String),
+    ToolchainError(String),
     ExecutionError(String),
 }
 
@@ -17,6 +18,7 @@ impl std::fmt::Display for CompilerError {
             CompilerError::LowerError(msg) => write!(f, "Lower error: {}", msg),
             CompilerError::CodegenError(msg) => write!(f, "Codegen error: {}", msg),
             CompilerError::LinkError(msg) => write!(f, "Link error: {}", msg),
+            CompilerError::ToolchainError(msg) => write!(f, "Toolchain error: {}", msg),
             CompilerError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
         }
     }

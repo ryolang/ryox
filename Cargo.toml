@@ -14,8 +14,12 @@ cranelift = "0.130"
 cranelift-jit = "0.130"
 cranelift-module = "0.130"
 cranelift-object = "0.130"
+xz2 = "0.1"
 logos = "0.16"
+tar = "0.4"
 target-lexicon = "0.13.5"
+ureq = "3"
+dirs = "6"
 
 [dev-dependencies]
 tempfile = "3.27"

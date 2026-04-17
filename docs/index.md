@@ -238,7 +238,7 @@ We welcome feedback on:
 ## Technical Foundation
 
 - **Compiler Backend**: Cranelift (AOT, JIT, WebAssembly support)
-- **Linker**: Zig (`zig cc`) for cross-compilation and C interop
+- **Linker**: Managed Zig toolchain (auto-downloaded, `zig cc`) for cross-compilation and C interop
 - **Runtime**: Hybrid architecture (Rust runtime + Ryo stdlib)
 - **Package Manager**: Cargo-inspired (`ryo.toml`, `ryopkgs.io` registry)
 - **Testing**: Integrated framework with `#[test]` attributes

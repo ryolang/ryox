@@ -14,42 +14,37 @@ This guide provides solutions to common issues when compiling and running Ryo pr
 
 ## Compilation Errors
 
-### "Failed to link with any available linker"
+### "Toolchain error: Zig binary not found after download"
 
 **Symptom:**
 ```
-Error: LinkError("Failed to link with any available linker. Last error: ...")
+Error: ToolchainError("Zig binary not found after download")
 ```
 
-**Cause:** No C linker found on your system. Ryo tries `zig cc`, `clang`, and `cc` in order, but none were found.
+**Cause:** The managed Zig toolchain failed to download or extract properly. This can happen due to network issues or interrupted downloads.
 
 **Solution:**
 
-**macOS:**
 ```bash
-xcode-select --install
-```
-This installs the Xcode Command Line Tools which includes `clang`.
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install build-essential
-```
-This installs `gcc`, `g++`, and other build tools.
-
-**Linux (Fedora/RHEL):**
-```bash
-sudo dnf groupinstall "Development Tools"
+# Remove any partial downloads and reinstall
+rm -rf ~/.ryo/toolchain/
+ryo toolchain install    # Or: cargo run -- toolchain install
+ryo toolchain status     # Verify installation
 ```
 
-**Universal Solution (Zig):**
-```bash
-# Download from https://ziglang.org/download/
-# Extract and add to PATH
-export PATH=$PATH:/path/to/zig
+### "Toolchain error: Failed to download Zig"
+
+**Symptom:**
 ```
-Zig includes a C compiler that works on all platforms.
+Error: ToolchainError("Failed to download Zig: ...")
+```
+
+**Cause:** Network issue preventing the Zig toolchain download from `ziglang.org`.
+
+**Solution:**
+1. Check your internet connection
+2. Verify that `https://ziglang.org` is accessible
+3. Retry: `ryo toolchain install`
 
 ---
 
@@ -203,10 +198,11 @@ Error: LinkError("... library not found for -lc")
    - macOS: Should be included with Xcode Command Line Tools
    - Linux: `sudo apt install libc6-dev` (Ubuntu/Debian)
 
-2. **Try Zig as linker:**
-   - Zig bundles all needed libraries
-   - Download from https://ziglang.org/
-   - Will be used automatically if in PATH
+2. **Reinstall managed Zig toolchain:**
+   ```bash
+   rm -rf ~/.ryo/toolchain/
+   ryo toolchain install
+   ```
 
 ---
 
@@ -297,7 +293,7 @@ Error: ExecutionError("No such file or directory (os error 2)")
    ```
 
 2. **Check linking succeeded:**
-   Look for "Linked with X: program" message in output
+   Look for "Built: program" message in output
 
 3. **Run from correct directory:**
    Executables are created in the current working directory, not the source file's directory
@@ -335,7 +331,7 @@ This should not happen with current Milestone 3 features - if it does, it's a co
 
 #### "clang: error: unsupported option '-arch'"
 
-**Cause:** Trying to cross-compile or architecture mismatch.
+**Cause:** Architecture mismatch when building the Ryo compiler from source (this is a Rust/system toolchain issue, not the Ryo managed Zig toolchain).
 
 **Solution:**
 Ensure you're compiling for the current architecture. Ryo uses `Triple::host()` which should be correct automatically.
@@ -390,14 +386,11 @@ sudo pacman -S glibc
 **Cause:** Old or incompatible assembler.
 
 **Solution:**
-Install newer binutils or use Zig:
+Install newer binutils:
 ```bash
-# Update binutils
 sudo apt upgrade binutils
-
-# Or use Zig
-# Download from https://ziglang.org/
 ```
+Ryo's managed Zig toolchain should handle this automatically. If the issue persists, reinstall: `ryo toolchain install`
 
 ---
 
@@ -414,7 +407,7 @@ sudo apt upgrade binutils
    ```cmd
    call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
    ```
-3. **Or install Zig** for a standalone C compiler
+3. **Reinstall managed Zig:** `ryo toolchain install`
 
 #### "Access is denied"
 
@@ -474,10 +467,8 @@ git log -1          # Last commit details
 # Check Rust
 rustc --version
 
-# Check linker
-which zig
-which clang
-which cc
+# Check managed Zig toolchain
+ryo toolchain status
 
 # Test simple program
 echo "x = 42" > test.ryo
@@ -524,7 +515,7 @@ del *.exe
 **Bottleneck:** Linking is usually the slowest phase (~200-400ms).
 
 **Optimization:**
-1. **Use Zig** - Faster than gcc/clang for simple programs
+1. **Managed Zig toolchain** handles linking automatically
 2. **Release builds** compile Ryo itself faster:
    ```bash
    cargo build --release
@@ -570,7 +561,7 @@ If your issue isn't covered here:
 
 - [Quick Start Guide](quickstart.md) - Getting started
 - [Getting Started](getting_started.md) - Language introduction
-- [Implementation Roadmap](implementation_roadmap.md) - Current status and limitations
+- [Implementation Roadmap](dev/implementation_roadmap.md) - Current status and limitations
 - [Compilation Pipeline](dev/compilation_pipeline.md) - How compilation works
 
 ### 2. Check Examples
@@ -603,7 +594,7 @@ If you've found a bug, file an issue with:
    ```bash
    rustc --version
    ```
-5. **Linker Used:** zig cc, clang, cc
+5. **Zig Toolchain Status:** output of `ryo toolchain status`
 6. **Full Error Output:** Copy-paste entire error message
 7. **Minimal Example:** Smallest code that reproduces the issue
 
@@ -616,7 +607,7 @@ If you've found a bug, file an issue with:
 **Architecture:** aarch64 (Apple M1)
 **Ryo Version:** abc123def456
 **Rust Version:** 1.70.0
-**Linker:** zig cc 0.11.0
+**Zig Toolchain:** managed (output of `ryo toolchain status`)
 
 **Code:**
 \`\`\`ryo
@@ -712,4 +703,4 @@ x = try divide(10, 0)  # Error: try/errors not yet supported
 
 ---
 
-**Can't find your issue?** Check the [documentation index](README.md) or [file an issue](https://github.com/ryolang/ryox/issues/new) on GitHub.
+**Can't find your issue?** Check the [documentation index](index.md) or [file an issue](https://github.com/ryolang/ryox/issues/new) on GitHub.

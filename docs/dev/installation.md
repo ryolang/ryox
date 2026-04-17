@@ -16,10 +16,9 @@ curl -fsSL https://ryolang.org/install.sh | sh
 **What the script does (`install.sh`):**
 1.  **Detection:** Identifies OS (Linux/Darwin) and Arch (AMD64/ARM64).
 2.  **Ryo Install:** Downloads the latest precompiled `ryo` binary to `~/.ryo/bin/`.
-3.  **Zig Check:** Checks if `zig` is in `$PATH`.
-    *   If `zig` is missing or the system version is incompatible, the script **downloads a local copy of Zig** to `~/.ryo/tools/zig/`.
-4.  **Path Setup:** Appends `export PATH="$HOME/.ryo/bin:$PATH"` to `.zshrc` or `.bashrc`.
-5.  **Config:** Creates a `~/.ryo/config.toml` pointing the Ryo compiler to the specific Zig binary downloaded.
+3.  **Path Setup:** Appends `export PATH="$HOME/.ryo/bin:$PATH"` to `.zshrc` or `.bashrc`.
+
+> **Note:** The Zig toolchain is managed by the Ryo compiler itself — it downloads a pinned Zig version on first use to `~/.ryo/toolchain/zig-{version}/`. The installer does not need to handle Zig installation. Users can also pre-install it with `ryo toolchain install`.
 
 ## 2. The Windows Experience: PowerShell
 
@@ -53,7 +52,7 @@ Once v0.1 is stable, platform-native package managers should be supported for vi
 
 *   **Homebrew (macOS/Linux):**
     *   Create a tap: `ryolang/ryo`.
-    *   Formula: Depends on `zig` package.
+    *   Formula: No system Zig dependency (managed by the compiler).
     *   `brew install ryo`
 *   **Winget (Windows):**
     *   Submit manifest to Microsoft.
@@ -71,14 +70,15 @@ Everything lives in one folder to keep the user's home directory clean.
 ```text
 ~/.ryo/
 ├── bin/
-│   └── ryo           # The compiler executable
-├── tools/
-│   └── zig/          # Private copy of Zig (if system one is missing)
-│       └── zig.exe
-├── registry/         # Cache for downloaded packages
+│   └── ryo               # The compiler executable
+├── toolchain/
+│   └── zig-{version}/    # Managed Zig toolchain (auto-downloaded)
+│       ├── zig
+│       └── lib/
+├── registry/             # Cache for downloaded packages
 │   ├── index/
 │   └── src/
-└── config.toml       # User preferences (e.g., "linker_path = ...")
+└── config.toml           # User preferences
 ```
 
 ## 6. Roadmap Integration
@@ -95,7 +95,7 @@ A **Deployment** milestone is needed to ensure this is ready for launch.
         *   `aarch64-apple-darwin`
         *   `x86_64-pc-windows-msvc`
     *   **The Script:** Write `install.sh` and `install.ps1`.
-    *   **Zig Logic:** Implement the logic to fetch the correct Zig tarball from `ziglang.org` JSON index if missing.
+    *   **Zig Logic:** ✅ Implemented in `src/toolchain.rs` — auto-downloads pinned Zig version on first use.
     *   **The Site:** A simple landing page with the `curl` command.
 
 ### Summary

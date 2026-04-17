@@ -151,10 +151,8 @@ cargo run -- ir arithmetic.ryo     # View Cranelift IR
 Before building Ryo, you need:
 
 1. **Rust toolchain** (1.91): [Install Rust](https://rustup.rs/)
-2. **A C linker** (one of the following):
-   - **Zig** (recommended): [Download Zig](https://ziglang.org/download/)
-   - **Clang**: Included with Xcode Command Line Tools (macOS) or build-essential (Linux)
-   - **GCC/cc**: System default compiler
+
+> **Note:** Ryo automatically downloads and manages its own Zig toolchain for linking — no manual linker installation required.
 
 ### Building from Source
 
@@ -199,8 +197,6 @@ Program (0..6)
           Literal(Int(42)) (4..6)
 
 [Codegen]
-Generated object file: first.o
-Linked with zig cc: first
 [Result] => 0
 ```
 

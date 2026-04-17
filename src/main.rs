@@ -12,6 +12,7 @@ mod linker;
 mod lower;
 mod parser;
 mod pipeline;
+mod toolchain;
 
 #[derive(Parser)]
 #[command(name = "ryo")]
@@ -48,6 +49,19 @@ enum Commands {
         /// Input file to compile
         file: PathBuf,
     },
+    /// Manage the Ryo toolchain (Zig linker)
+    Toolchain {
+        #[command(subcommand)]
+        action: ToolchainAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ToolchainAction {
+    /// Download and install the Zig linker
+    Install,
+    /// Show toolchain installation status
+    Status,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,6 +73,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Ir { file } => pipeline::ir_command(&file)?,
         Commands::Run { file } => pipeline::run_file(&file)?,
         Commands::Build { file } => pipeline::build_file(&file)?,
+        Commands::Toolchain { action } => match action {
+            ToolchainAction::Install => {
+                toolchain::ensure_zig()?;
+                println!("Toolchain ready.");
+            }
+            ToolchainAction::Status => {
+                let status = if toolchain::is_installed() {
+                    "installed"
+                } else {
+                    "not installed"
+                };
+                println!("Zig version: {} ({status})", toolchain::pinned_version());
+            }
+        },
     }
 
     Ok(())

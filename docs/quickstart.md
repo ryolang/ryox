@@ -11,20 +11,7 @@ Before you begin, make sure you have:
    rustc --version  # Should show 1.70+
    ```
 
-2. **A C linker** installed (one of: zig cc, clang, or cc)
-   ```bash
-   # Check if you have a linker:
-   which zig    # Preferred (best cross-compilation)
-   which clang  # Or this
-   which cc     # Or this (system default)
-   ```
-
-   If none are installed:
-   - **macOS**: `xcode-select --install`
-   - **Linux**: `sudo apt install build-essential` (Ubuntu/Debian)
-   - **Windows**: Install MSVC or MinGW
-
-3. **Ryo compiler** built
+2. **Ryo compiler** built
    ```bash
    cd /path/to/ryox
    cargo build --release
@@ -71,8 +58,6 @@ Program (24..30)
           Literal(Int(42)) (28..30)
 
 [Codegen]
-Generated object file: first.o
-Linked with zig cc: first
 [Result] => 0
 ```
 
@@ -80,32 +65,10 @@ Linked with zig cc: first
 
 1. **[Input Source]** - Shows your source code
 2. **[AST]** - Abstract Syntax Tree representation of your program
-3. **[Codegen]** - Compilation to native code:
-   - Created `first.o` (object file)
-   - Linked to create `first` executable
+3. **[Codegen]** - JIT compilation to native code and execution
 4. **[Result] => 0** - The exit code (all Milestone 3 programs exit with 0)
 
-### Step 4: Verify the Executable
-
-Two new files were created in your directory:
-
-```bash
-ls -la first*
-# first.o    - Object file (intermediate)
-# first      - Executable (final program)
-```
-
-You can run the executable directly:
-
-```bash
-./first        # Unix/macOS
-first.exe      # Windows
-
-echo $?        # Check exit code (Unix/macOS) - will show 0
-echo %ERRORLEVEL%  # Check exit code (Windows) - will show 0
-```
-
-The exit code will be 0 (success)!
+> **Tip:** `ryo run` uses JIT (in-memory) execution. To produce a standalone binary, use `ryo build first.ryo` instead — this creates a `first` executable via AOT compilation.
 
 ## Understanding Exit Codes
 
@@ -199,7 +162,7 @@ return v0
 ```
 
 ### Phase 4: Linking
-Combines object file with C runtime to create executable.
+Combines object file with C runtime to create executable using Ryo's managed Zig toolchain (downloaded automatically on first use).
 
 ### Phase 5: Execution
 Runs the executable and captures the exit code.
@@ -232,14 +195,15 @@ Shows information about Cranelift IR generation (confirms compilation succeeded)
 
 ## Common First-Time Issues
 
-### "Failed to link with any available linker"
+### "Toolchain error: Zig binary not found"
 
-**Problem:** No linker found on your system.
+**Problem:** The managed Zig toolchain failed to download or install.
 
 **Solution:**
-- macOS: `xcode-select --install`
-- Linux: `sudo apt install build-essential`
-- Or install Zig: https://ziglang.org/
+```bash
+ryo toolchain install    # Or: cargo run -- toolchain install
+ryo toolchain status     # Verify installation
+```
 
 ### "No such file or directory"
 
@@ -289,7 +253,7 @@ Future versions will use a build directory like Cargo's `target/`.
 - Use loops (Milestone 10)
 - Handle errors (Milestone 7)
 
-See `docs/implementation_roadmap.md` for what's coming next!
+See `docs/dev/implementation_roadmap.md` for what's coming next!
 
 ## Next Steps
 
@@ -315,7 +279,7 @@ See `docs/implementation_roadmap.md` for what's coming next!
 3. **Learn More:**
    - [Getting Started Guide](getting_started.md) - Full language introduction
    - [Troubleshooting](troubleshooting.md) - Solutions to common problems
-   - [Implementation Roadmap](implementation_roadmap.md) - See what's completed and what's next
+   - [Implementation Roadmap](dev/implementation_roadmap.md) - See what's completed and what's next
    - [Examples README](../examples/milestone3/README.md) - Detailed example explanations
 
 4. **Contribute:**
@@ -326,7 +290,7 @@ See `docs/implementation_roadmap.md` for what's coming next!
 ## Questions or Problems?
 
 - Check [docs/troubleshooting.md](troubleshooting.md) for solutions
-- Read [docs/implementation_roadmap.md](implementation_roadmap.md) for status
+- Read [docs/implementation_roadmap.md](dev/implementation_roadmap.md) for status
 - File an issue on GitHub with:
   - Your platform (macOS/Linux/Windows)
   - Ryo version: `git rev-parse HEAD`

@@ -27,7 +27,8 @@ Source → Lexer → Indent Preprocessor → Parser → Lower (HIR) → Codegen 
 - `builtins.rs` — Builtin function registry (print, future builtins)
 - `codegen.rs` — Cranelift IR generation from HIR
 - `errors.rs` — CompilerError type
-- `linker.rs` — Linker discovery and executable linking
+- `linker.rs` — Executable linking via managed Zig toolchain
+- `toolchain.rs` — Zig toolchain management (download, version pinning, path resolution)
 - `pipeline.rs` — Pipeline orchestration (lex, parse, lower, compile, run)
 
 ## Testing Strategy
@@ -99,16 +100,11 @@ hexdump -C output.o | less
 
 ### Common Build Issues
 
-**Issue**: `error: linker 'cc' not found`
-- **Solution**: Install build essentials
+**Issue**: `Toolchain error: Zig binary not found`
+- **Solution**: Install the managed Zig toolchain
   ```bash
-  # Ubuntu/Debian
-  sudo apt install build-essential
-
-  # macOS
-  xcode-select --install
-
-  # Or install Zig for zig cc
+  ryo toolchain install
+  ryo toolchain status   # verify installation
   ```
 
 **Issue**: Cranelift version mismatch
@@ -121,7 +117,7 @@ hexdump -C output.o | less
 
 **Issue**: Generated executable crashes
 - **Debug**: Check object file with `objdump` or `otool`
-- **Check**: Linker used (`zig cc` vs `clang` vs `cc`)
+- **Check**: Managed Zig installation (`ryo toolchain status`)
 - **Verify**: Target triple matches host architecture
 
 **Issue**: Parse errors not helpful

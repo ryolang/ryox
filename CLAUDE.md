@@ -123,8 +123,15 @@ See [examples](docs/examples/README.md) for code samples.
 cargo check                  # Check local pkg for errors
 cargo build                  # Build debug
 cargo build --release        # Build release
-cargo run -- run <file>      # Compile and execute
+cargo run -- run <file>      # Compile and execute (JIT)
+cargo run -- build <file>    # Compile to standalone binary (AOT)
 cargo test                   # Run tests
+```
+
+### Toolchain Management
+```bash
+cargo run -- toolchain install   # Download managed Zig linker
+cargo run -- toolchain status    # Show Zig installation status
 ```
 
 ### File Extensions

@@ -21,15 +21,17 @@ ryo --version
 
 The installer automatically sets up:
 - Ryo compiler and toolchain in `~/.ryo/bin/`
-- Zig linker (downloaded automatically) in `~/.ryo/tools/zig/`
+- Zig linker (downloaded automatically) in `~/.ryo/toolchain/zig-{version}/`
 - PATH configuration in your shell profile
 
 All files are contained in the `~/.ryo/` directory for easy management.
 
 ## Tools Included
 
-- **`ryo run`** - Compile and run programs
-- **`ryo build`** - Compile to binaries
+- **`ryo run`** - Compile and run programs (JIT)
+- **`ryo build`** - Compile to standalone binaries (AOT)
+- **`ryo toolchain install`** - Download the managed Zig linker
+- **`ryo toolchain status`** - Show Zig installation status
 - **`ryo test`** - Run tests
 - **`ryo fmt`** - Format code
 - **`ryo upgrade`** - Update Ryo to the latest version

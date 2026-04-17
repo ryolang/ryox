@@ -132,10 +132,7 @@ Generated Cranelift IR (conceptual):
 
 **4. Linking**
 
-The linker combines the object file with system libraries to create a standalone executable. Ryo tries multiple linkers automatically:
-- `zig cc` (preferred - excellent cross-platform support)
-- `clang` (common on macOS/Linux)
-- `cc` (system default)
+The linker combines the object file with system libraries to create a standalone executable. Ryo automatically manages its own Zig toolchain for linking — it downloads Zig on first use and stores it in `~/.ryo/toolchain/`.
 
 **5. Execution**
 
