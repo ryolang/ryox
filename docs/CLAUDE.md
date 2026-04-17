@@ -26,9 +26,14 @@ fn main():
 if x > 0:
     print("positive")
 
-# Loops - colon and indentation
-for i in range(10):
+# Loops - three forms, no 'while' keyword
+for i in range(10):       # counted (range built-in, exclusive end)
     print(i)
+for item in items:        # iteration over collections
+    print(item)
+mut n = 0
+for n < 10:               # condition-based (replaces while)
+    n += 1
 ```
 
 ### Indentation

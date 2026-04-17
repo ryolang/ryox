@@ -206,7 +206,7 @@ As of 2026, the majority of application code is written by AI agents and reviewe
 *   **Identifiers:** `[a-zA-Z_][a-zA-Z0-9_]*`. Case-sensitive.
     *   *Convention:* Follow `snake_case` for variables, functions, and modules. Use `PascalCase` for user-defined types (structs, enums, traits) and enum variants. Built-in fundamental types (primitives and collections) use lowercase (e.g., `int`, `str`, `list`, `map`). *(Rationale: Adopting common conventions enhances readability and aligns with practices in Python and Rust).*
 *   **Keywords:** `fn`, `struct`, `enum`, `trait`, `impl`, `mut`, `if`, `elif`, `else`, `for`, `in`, `return`, `break`, `continue`, `import`, `match`, `pub`, `package`, `true`, `false`, `none`, `void`, `move`, `error`, `try`, `catch`, `orelse`, `select`, `case`, `default`. (Note: `comptime`, `unsafe` are planned for future implementation. `void` is reserved for the unit type. `as` and `let` are not keywords. `package` is an access modifier keyword added for package-internal visibility. `select`, `case`, and `default` are used for non-deterministic concurrent operations).
-*   **Operators:** Standard set including arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), logical (`and`, `or`, `not`), assignment (`=`), type annotation (`:`), scope/literal delimiters (`{`, `}`, `[`, `]`, `(` `)`), access (`.`), error union prefix (`!`), optional chaining (`?.`).
+*   **Operators:** Standard set including arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), logical (`and`, `or`, `not`), assignment (`=`), type annotation (`:`), scope/literal delimiters (`{`, `}`, `[`, `]`, `(` `)`), access (`.`), error union prefix (`!`), optional chaining (`?.`), range bounds (`..`, used in constrained types `int(1..65535)` — not used for iteration or slicing), slice (`:` inside `[]`, e.g., `s[1:4]`, `s[:4]`, `s[2:]` — Python/Go convention).
     *   **Important Note:** The `!` operator is used exclusively for error union type prefixes (`!T` = error or T, `ErrorType!T` = ErrorType or T). The `!` is NOT used for logical negation—use `not` instead (following Python convention). Similarly, `?` operator in type context (`?T`) denotes optional types, while `?.` is the optional chaining operator.
     *   `_` (Underscore): The underscore `_` is treated as a special identifier. When used in patterns (`match`, destructuring assignment), it signifies a wildcard or an intentionally ignored value; it does not bind to a variable.
 *   **Literals:** Integers (decimal `123`, hex `0xFF`, octal `0o77`, binary `0b11`; underscores `1_000`), Floats (`123.45`, `1.23e-10`; underscores `1_000.0`), Strings (`"..."` basic escapes like `\n`, `\t`, `\\`, `\"`, `\xHH`, `\u{HHHH}`). `f"..."` (f-strings with `{expression}` interpolation), Booleans (`true`, `false`), Optional null value (`none`), List (`[...]`), Map (`{key: value, ...}`), Tuple (`(v1, v2, ...)`), Char (`'a'`, `'\u{1F600}'`).
@@ -289,7 +289,45 @@ As of 2026, the majority of application code is written by AI agents and reviewe
 		fn reset(&mut self): self.count = 0
 	```
 *   **Method Call:** `instance.method(args...)`. Field Access: `instance.field`.
-*   **Control Flow:** `if/elif/else`, `for item in iterable:`, `for i in range(start, end):`.
+*   **Control Flow:** `if/elif/else`, three `for` loop forms:
+    *   **Iteration:** `for item in iterable:` — iterate over collections
+    *   **Counted:** `for i in range(start, end):` — counted iteration (exclusive end)
+    *   **Condition:** `for condition:` — repeat while condition is true (Ryo's replacement for `while`)
+    *   Ryo has no `while` keyword — `for condition:` serves this role. One keyword, fewer concepts.
+*   **Loop Semantics:**
+    *   **Loop Variable Scope:** Loop variables are **block-scoped** — they exist only inside the loop body and are not accessible after the loop ends.
+        ```ryo
+		for i in range(5):
+		    print(i)      # ok
+		# print(i)        # compile error: `i` not in scope
+		```
+    *   **Loop Variable Mutability:** Loop variables are **immutable** (consistent with Ryo's default). In iteration loops, the variable is re-bound each iteration. For condition-based loops, use a separately declared `mut` variable.
+        ```ryo
+		for item in items:
+		    # item is immutable — cannot assign to item
+		    print(item)
+
+		mut counter = 0
+		for counter < 10:
+		    print(counter)
+		    counter += 1    # counter is mut, declared outside the loop
+		```
+    *   **`range()` Built-in Function:** The only way to create counted iteration sequences. Exclusive end (matches Python convention).
+        *   `range(end)` — 0 to end, exclusive
+        *   `range(start, end)` — start to end, exclusive
+        *   `range(start, end, step)` — with step
+        ```ryo
+		for i in range(5):           # 0, 1, 2, 3, 4
+		    print(i)
+		for i in range(2, 8):        # 2, 3, 4, 5, 6, 7
+		    print(i)
+		for i in range(0, 10, 2):    # 0, 2, 4, 6, 8
+		    print(i)
+		```
+        **Note:** The `..` operator is reserved for type bounds (`int(1..65535)`). Slicing uses `:` inside `[]` (`s[1:4]`). Iteration uses `range()`. Each operator has exactly one meaning.
+    *   **`break`/`continue`:** Affect the **innermost** enclosing loop. Using `break` or `continue` outside a loop is a compile error. Labeled breaks are not supported in v0.1. Loops are statements, not expressions — `break` does not carry a value.
+    *   *(Rationale: Block-scoped loop variables prevent accidental use of stale state. Immutable loop variables are consistent with Ryo's default and eliminate a class of bugs. `range()` is the single mechanism for counted iteration — no operator alternative, no ambiguity. It follows Python conventions because that's the target audience. Each operator has exactly one purpose: `range()` for iteration, `:` for slicing, `..` for type bounds. One loop keyword (`for`) with three forms keeps the language simple — `while` is redundant when `for condition:` exists.)*
+
 *   **Pattern Matching:** `match expr: Pattern1: ... Pattern2(bind): ... Pattern3 { x, y }: ... _ : ...` (`_` for wildcard/default).
 
 *   **Closures:** Anonymous functions with capture semantics.
@@ -326,8 +364,8 @@ As of 2026, the majority of application code is written by AI agents and reviewe
 
 Slices are lightweight borrowed views into owned data. They are **scope-locked** — they exist only within the block where they're created and cannot be stored in variables, returned from functions, or placed in struct fields (see Section 5, Rules 5-6 and Section 5.7).
 
-*   `str` slice: Immutable UTF-8 view (pointer + byte length). Created via `my_str[start..end]` or string slicing operations.
-*   `list[T]` slice: Immutable view of `T` elements (pointer + element length). Created via `my_list[start..end]`.
+*   `str` slice: Immutable UTF-8 view (pointer + byte length). Created via `my_str[start:end]` or string slicing operations. Supports shorthand: `s[:end]` (from start), `s[start:]` (to end).
+*   `list[T]` slice: Immutable view of `T` elements (pointer + element length). Created via `my_list[start:end]`. Supports shorthand: `items[:3]`, `items[2:]`.
 *   `&mut list[T]` slice: Mutable slice passed via explicit `&mut` parameter.
 
 **Function parameters use owned types** — the compiler handles borrowing implicitly (Rule 2):
@@ -987,7 +1025,7 @@ Mutation requires `&mut` in **both** the function signature and at the call site
 
 ```ryo
 fn add_bonus(scores: &mut list[int], bonus: int):
-	for i in 0..len(scores):
+	for i in range(len(scores)):
 		scores[i] += bonus
 
 fn main():
@@ -1591,9 +1629,10 @@ fn load_and_parse(path: str) -> !Config:
     *   If error: propagates error to caller
 
 *   **Error Composition with `try`:**
-    *   In functions with inferred error unions, `try` automatically collects all error types
-    *   In explicit error unions, error must be in the union
-    *   In single error type, error must match exactly
+    *   **Inferred unions (`!T`):** `try` automatically collects all error types from `try` expressions into the inferred union. No manual bookkeeping needed.
+    *   **Explicit unions (`(E1 | E2)!T`):** The error type of each `try` expression must be a member of the declared union. If not, the compiler emits an error: `"error type ParseError is not in the error union (FileError | NetworkError)"`. No automatic `From` conversion — composition is explicit.
+    *   **Single error type (`E!T`):** The error type must match exactly.
+    *   *(Rationale: Inferred unions are convenient for internal functions. Explicit unions document API contracts and require the developer to acknowledge every error type. No implicit conversions — consistent with Ryo's "explicit where the reviewer needs to see intent" principle.)*
 
 *   **Example - Inferred Union:**
     ```ryo
@@ -3092,7 +3131,7 @@ fn main():
     *   **Ryo Standard Library (`std`):** High-level APIs written in Ryo, wrapping the runtime via internal FFI.
 *   **Structure:** Composed of distinct packages (e.g., `io`, `string`, `collections`, `net.http`, `ffi`). Users import only needed packages. *(Rationale: Reduces binary size, improves compile times, makes dependencies explicit).*
 *   **Core Packages (Initial):**
-    *   `core`/`builtin` (Implicit): Core traits (`Drop`, `From`, `Length` for `.len(self)`), built-in functions (`print`, `println`, `panic`), error and optional type support.
+    *   `core`/`builtin` (Implicit): Core traits (`Drop`, `From`, `Length` for `.len(self)`), built-in functions (`print`, `println`, `panic`, `range`), error and optional type support.
     *   `io`: Console (`readln`), Files (`File`), Buffering (functions return `IoError!T`), implements `Drop`.
     *   `string`: `&str` manipulation, parsing (functions return `ParseError!T`).
     *   `collections`: `list[T]`, `map[K, V]` types and methods.

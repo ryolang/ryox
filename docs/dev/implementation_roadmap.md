@@ -780,7 +780,15 @@ fn main() -> int:
 
 **Implementation Notes:**
 - Short-circuit evaluation for `and`/`or` (don't evaluate right side if not needed)
-- Break/continue only valid inside loops (checked at compile time)
+- **Three `for` loop forms:**
+  - `for item in iterable:` — iteration over collections
+  - `for i in range(start, end):` — counted iteration (`range()` is the only mechanism, no `..` for iteration)
+  - `for condition:` — condition-based loop (Ryo has no `while` keyword)
+- **Loop variables are block-scoped** — not accessible after the loop ends
+- **Loop variables are immutable** — consistent with Ryo's default. Condition-based loops use externally declared `mut` variables
+- **`range()` is a built-in function** (like `print`). Only mechanism for counted iteration. Exclusive end.
+- **Operator separation:** `range()` for iteration, `:` for slicing (`s[1:4]`), `..` for type bounds only (`int(1..65535)`)
+- Break/continue affect **innermost loop only**. No labeled breaks in v0.1
 - If expressions (returning values) deferred to later milestone
 - Dependencies: Milestone 7 (comparison operators)
 
