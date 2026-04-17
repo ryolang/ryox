@@ -38,30 +38,28 @@ enum Commands {
         /// Input file to generate IR for
         file: PathBuf,
     },
-    /// Compile and run a Ryo program
+    /// Compile and run a Ryo program (JIT)
     Run {
         /// Input file to compile and run
         file: PathBuf,
-        // TODO: run behaviour must be same as GO
     },
-    //TODO: build generate a binary, by default without object file.
+    /// Compile a Ryo program to a standalone binary (AOT)
+    Build {
+        /// Input file to compile
+        file: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Lex { file } => {
-            pipeline::lex_command(&file).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-        }
-        Commands::Parse { file } => {
-            pipeline::parse_command(&file).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-        }
-        Commands::Ir { file } => {
-            pipeline::ir_command(&file).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-        }
-        Commands::Run { file } => {
-            pipeline::run_file(&file).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-        }
+        Commands::Lex { file } => pipeline::lex_command(&file)?,
+        Commands::Parse { file } => pipeline::parse_command(&file)?,
+        Commands::Ir { file } => pipeline::ir_command(&file)?,
+        Commands::Run { file } => pipeline::run_file(&file)?,
+        Commands::Build { file } => pipeline::build_file(&file)?,
     }
+
+    Ok(())
 }

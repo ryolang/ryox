@@ -3,23 +3,24 @@ use crate::hir::{BinaryOp, HirExpr, HirExprKind, HirFunction, HirProgram, HirStm
 use cranelift::codegen::isa;
 use cranelift::codegen::settings::{self, Configurable};
 use cranelift::prelude::*;
+use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, DataId, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::collections::HashMap;
 use target_lexicon::Triple;
 
-pub struct Codegen {
+pub struct Codegen<M: Module> {
     builder_context: FunctionBuilderContext,
     ctx: codegen::Context,
-    module: ObjectModule,
+    module: M,
     int_type: types::Type,
     data_ctx: DataDescription,
     string_data: HashMap<String, DataId>,
     triple: Triple,
 }
 
-struct FunctionContext<'a> {
-    module: &'a mut ObjectModule,
+struct FunctionContext<'a, M: Module> {
+    module: &'a mut M,
     data_ctx: &'a mut DataDescription,
     string_data: &'a mut HashMap<String, DataId>,
     int_type: types::Type,
@@ -28,8 +29,23 @@ struct FunctionContext<'a> {
     func_ids: &'a HashMap<String, FuncId>,
 }
 
-impl Codegen {
-    pub fn new(target_triple: Triple) -> Result<Self, String> {
+impl<M: Module> Codegen<M> {
+    fn from_module(module: M, triple: Triple) -> Self {
+        let int_type = module.target_config().pointer_type();
+        Self {
+            builder_context: FunctionBuilderContext::new(),
+            ctx: module.make_context(),
+            module,
+            int_type,
+            data_ctx: DataDescription::new(),
+            string_data: HashMap::new(),
+            triple,
+        }
+    }
+}
+
+impl Codegen<ObjectModule> {
+    pub fn new_aot(target_triple: Triple) -> Result<Self, String> {
         let mut shared_builder = settings::builder();
         shared_builder
             .enable("is_pic")
@@ -45,36 +61,51 @@ impl Codegen {
             ObjectBuilder::new(isa, "ryo_module", cranelift_module::default_libcall_names())
                 .map_err(|e| format!("Failed to create ObjectBuilder: {}", e))?;
 
-        let module = ObjectModule::new(obj_builder);
-        let int_type = module.target_config().pointer_type();
-
-        Ok(Self {
-            builder_context: FunctionBuilderContext::new(),
-            ctx: module.make_context(),
-            module,
-            int_type,
-            data_ctx: DataDescription::new(),
-            string_data: HashMap::new(),
-            triple: target_triple,
-        })
+        Ok(Self::from_module(
+            ObjectModule::new(obj_builder),
+            target_triple,
+        ))
     }
 
-    pub fn compile(&mut self, program: &HirProgram) -> Result<FuncId, String> {
-        let mut func_ids: HashMap<String, FuncId> = HashMap::new();
+    pub fn finish(self) -> Result<Vec<u8>, String> {
+        self.module
+            .finish()
+            .emit()
+            .map_err(|e| format!("Failed to emit object file: {}", e))
+    }
+}
 
-        for func in &program.functions {
-            let sig = self.build_signature(func);
-            let linkage = if func.name == "main" {
-                Linkage::Export
-            } else {
-                Linkage::Local
-            };
-            let func_id = self
-                .module
-                .declare_function(&func.name, linkage, &sig)
-                .map_err(|e| format!("Failed to declare function '{}': {}", func.name, e))?;
-            func_ids.insert(func.name.clone(), func_id);
+impl Codegen<JITModule> {
+    pub fn new_jit() -> Result<Self, String> {
+        let jit_builder = JITBuilder::new(cranelift_module::default_libcall_names())
+            .map_err(|e| format!("Failed to create JIT builder: {}", e))?;
+
+        Ok(Self::from_module(
+            JITModule::new(jit_builder),
+            Triple::host(),
+        ))
+    }
+
+    pub fn execute(mut self, main_id: FuncId) -> Result<i32, String> {
+        self.module
+            .finalize_definitions()
+            .map_err(|e| format!("Failed to finalize JIT definitions: {}", e))?;
+
+        let code_ptr = self.module.get_finalized_function(main_id);
+        let main_fn: fn() -> isize = unsafe { std::mem::transmute(code_ptr) };
+        let result = main_fn();
+
+        unsafe {
+            self.module.free_memory();
         }
+
+        Ok(result as i32)
+    }
+}
+
+impl<M: Module> Codegen<M> {
+    pub fn compile(&mut self, program: &HirProgram) -> Result<FuncId, String> {
+        let func_ids = self.declare_all_functions(program)?;
 
         for func in &program.functions {
             self.compile_function(func, &func_ids)?;
@@ -87,8 +118,24 @@ impl Codegen {
     }
 
     pub fn compile_and_dump_ir(&mut self, program: &HirProgram) -> Result<String, String> {
-        let mut func_ids: HashMap<String, FuncId> = HashMap::new();
+        let func_ids = self.declare_all_functions(program)?;
 
+        let mut ir_output = String::new();
+        for func in &program.functions {
+            if let Some(ir) = self.compile_function(func, &func_ids)? {
+                ir_output.push_str(&ir);
+                ir_output.push('\n');
+            }
+        }
+
+        Ok(ir_output)
+    }
+
+    fn declare_all_functions(
+        &mut self,
+        program: &HirProgram,
+    ) -> Result<HashMap<String, FuncId>, String> {
+        let mut func_ids = HashMap::new();
         for func in &program.functions {
             let sig = self.build_signature(func);
             let linkage = if func.name == "main" {
@@ -102,16 +149,7 @@ impl Codegen {
                 .map_err(|e| format!("Failed to declare function '{}': {}", func.name, e))?;
             func_ids.insert(func.name.clone(), func_id);
         }
-
-        let mut ir_output = String::new();
-        for func in &program.functions {
-            if let Some(ir) = self.compile_function(func, &func_ids)? {
-                ir_output.push_str(&ir);
-                ir_output.push('\n');
-            }
-        }
-
-        Ok(ir_output)
+        Ok(func_ids)
     }
 
     fn build_signature(&self, func: &HirFunction) -> Signature {
@@ -164,7 +202,7 @@ impl Codegen {
                     HirStmt::VarDecl {
                         name, initializer, ..
                     } => {
-                        let mut func_ctx = FunctionContext {
+                        let mut func_ctx: FunctionContext<'_, M> = FunctionContext {
                             module: &mut self.module,
                             data_ctx: &mut self.data_ctx,
                             string_data: &mut self.string_data,
@@ -179,7 +217,7 @@ impl Codegen {
                         locals.insert(name.clone(), var);
                     }
                     HirStmt::Return(Some(expr), _) => {
-                        let mut func_ctx = FunctionContext {
+                        let mut func_ctx: FunctionContext<'_, M> = FunctionContext {
                             module: &mut self.module,
                             data_ctx: &mut self.data_ctx,
                             string_data: &mut self.string_data,
@@ -197,7 +235,7 @@ impl Codegen {
                         has_return = true;
                     }
                     HirStmt::Expr(expr, _) => {
-                        let mut func_ctx = FunctionContext {
+                        let mut func_ctx: FunctionContext<'_, M> = FunctionContext {
                             module: &mut self.module,
                             data_ctx: &mut self.data_ctx,
                             string_data: &mut self.string_data,
@@ -235,7 +273,7 @@ impl Codegen {
 
     fn store_string(
         content: &str,
-        module: &mut ObjectModule,
+        module: &mut M,
         data_ctx: &mut DataDescription,
         string_data: &mut HashMap<String, DataId>,
     ) -> Result<DataId, String> {
@@ -261,7 +299,7 @@ impl Codegen {
     fn eval_expr(
         builder: &mut FunctionBuilder,
         expr: &HirExpr,
-        ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext<'_, M>,
     ) -> Result<Value, String> {
         match &expr.kind {
             HirExprKind::IntLiteral(val) => Ok(builder.ins().iconst(ctx.int_type, *val as i64)),
@@ -336,7 +374,7 @@ impl Codegen {
     fn generate_print_call(
         builder: &mut FunctionBuilder,
         args: &[HirExpr],
-        ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext<'_, M>,
     ) -> Result<(), String> {
         if args.len() != 1 {
             return Err(format!(
@@ -390,12 +428,5 @@ impl Codegen {
         let _bytes_written = builder.inst_results(call_inst)[0];
 
         Ok(())
-    }
-
-    pub fn finish(self) -> Result<Vec<u8>, String> {
-        self.module
-            .finish()
-            .emit()
-            .map_err(|e| format!("Failed to emit object file: {}", e))
     }
 }

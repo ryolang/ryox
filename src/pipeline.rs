@@ -12,7 +12,6 @@ use chumsky::{Parser, input::Stream, prelude::*};
 use logos::Logos;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use target_lexicon::Triple;
 
 // Constants for magic strings
@@ -132,7 +131,7 @@ pub(crate) fn ir_command(file: &Path) -> Result<(), CompilerError> {
 
 fn generate_and_display_ir(hir: &hir::HirProgram) -> Result<(), CompilerError> {
     let target = Triple::host();
-    let mut codegen = codegen::Codegen::new(target).map_err(CompilerError::CodegenError)?;
+    let mut codegen = codegen::Codegen::new_aot(target).map_err(CompilerError::CodegenError)?;
     let ir = codegen
         .compile_and_dump_ir(hir)
         .map_err(CompilerError::CodegenError)?;
@@ -155,57 +154,39 @@ pub(crate) fn run_file(file: &Path) -> Result<(), CompilerError> {
 
     let hir = lower::lower(&program).map_err(CompilerError::LowerError)?;
 
-    let (obj_filename, exe_filename) = get_output_filenames(file);
-    compile_program(&hir, &obj_filename, &exe_filename)?;
+    println!("[Codegen]");
+    let mut codegen = codegen::Codegen::new_jit().map_err(CompilerError::CodegenError)?;
+    let main_id = codegen.compile(&hir).map_err(CompilerError::CodegenError)?;
+    let result = codegen
+        .execute(main_id)
+        .map_err(CompilerError::ExecutionError)?;
 
-    let result = execute_program(&exe_filename)?;
     display_result(result);
 
     Ok(())
 }
 
-fn compile_program(
-    hir: &hir::HirProgram,
-    obj_filename: &str,
-    exe_filename: &str,
-) -> Result<(), CompilerError> {
+pub(crate) fn build_file(file: &Path) -> Result<(), CompilerError> {
+    let input = read_source_file(file)?;
+    let program = parse_source(&input)?;
+    let hir = lower::lower(&program).map_err(CompilerError::LowerError)?;
+
+    let (obj_filename, exe_filename) = get_output_filenames(file);
+
     println!("[Codegen]");
-
     let target = Triple::host();
-    let mut codegen = codegen::Codegen::new(target).map_err(CompilerError::CodegenError)?;
-
-    codegen.compile(hir).map_err(CompilerError::CodegenError)?;
-
+    let mut codegen = codegen::Codegen::new_aot(target).map_err(CompilerError::CodegenError)?;
+    codegen.compile(&hir).map_err(CompilerError::CodegenError)?;
     let obj_bytes = codegen.finish().map_err(CompilerError::CodegenError)?;
 
-    fs::write(obj_filename, obj_bytes).map_err(CompilerError::from)?;
-
+    fs::write(&obj_filename, obj_bytes).map_err(CompilerError::from)?;
     println!("Generated object file: {}", obj_filename);
 
-    linker::link_executable(obj_filename, exe_filename)?;
+    linker::link_executable(&obj_filename, &exe_filename)?;
+    let _ = fs::remove_file(&obj_filename);
 
+    println!("Built: {}", exe_filename);
     Ok(())
-}
-
-fn execute_program(exe_file: &str) -> Result<i32, CompilerError> {
-    // On Unix-like systems, we need to prefix with ./ to run an executable in the current directory
-    let exe_path = if cfg!(windows) {
-        exe_file.to_string()
-    } else {
-        format!("./{}", exe_file)
-    };
-
-    let output = Command::new(&exe_path)
-        .output()
-        .map_err(|e| CompilerError::ExecutionError(e.to_string()))?;
-
-    // Get the exit code (the program's return value)
-    match output.status.code() {
-        Some(code) => Ok(code),
-        None => Err(CompilerError::ExecutionError(
-            "Could not determine exit code".to_string(),
-        )),
-    }
 }
 
 fn display_result(result: i32) {
