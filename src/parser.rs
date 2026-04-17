@@ -53,15 +53,99 @@ where
         .then_ignore(end())
 }
 
-/// Parse a single statement
+/// Parse a statement that can appear inside a function body (no nested functions)
+fn body_statement_parser<'a, I>()
+-> impl Parser<'a, I, Statement, extra::Err<Rich<'a, Token<'a>>>> + 'a
+where
+    I: ValueInput<'a, Token = Token<'a>, Span = SimpleSpan>,
+{
+    let return_stmt = just(Token::Return)
+        .ignore_then(expression_parser().or_not())
+        .map_with(|expr, e| Statement {
+            span: e.span(),
+            kind: StmtKind::Return(expr),
+        });
+
+    let var_decl = var_decl_parser().map_with(|kind, e| Statement {
+        span: e.span(),
+        kind: StmtKind::VarDecl(kind),
+    });
+
+    let expr_stmt = expression_parser().map_with(|expr, e| Statement {
+        span: e.span(),
+        kind: StmtKind::ExprStmt(expr),
+    });
+
+    choice((return_stmt, var_decl, expr_stmt))
+}
+
+/// Parse a top-level statement (includes function definitions)
 fn statement_parser<'a, I>() -> impl Parser<'a, I, Statement, extra::Err<Rich<'a, Token<'a>>>> + 'a
 where
     I: ValueInput<'a, Token = Token<'a>, Span = SimpleSpan>,
 {
-    var_decl_parser().map_with(|kind, e| Statement {
+    let function_def = function_def_parser().map_with(|func, e| Statement {
         span: e.span(),
-        kind: StmtKind::VarDecl(kind),
-    })
+        kind: StmtKind::FunctionDef(func),
+    });
+
+    choice((function_def, body_statement_parser()))
+}
+
+/// Parse a function definition: fn name(params) [-> type]: INDENT body DEDENT
+fn function_def_parser<'a, I>()
+-> impl Parser<'a, I, FunctionDef, extra::Err<Rich<'a, Token<'a>>>> + 'a
+where
+    I: ValueInput<'a, Token = Token<'a>, Span = SimpleSpan>,
+{
+    let ident = select! {
+        Token::Ident(name) => name.to_string()
+    }
+    .map_with(|name, e| Ident::new(name, e.span()));
+
+    let type_expr = select! {
+        Token::Ident(name) => name.to_string()
+    }
+    .map_with(|name, e| TypeExpr::new(name, e.span()));
+
+    let param = select! {
+        Token::Ident(name) => name.to_string()
+    }
+    .map_with(|name, e| Ident::new(name, e.span()))
+    .then_ignore(just(Token::Colon))
+    .then(type_expr)
+    .map_with(|(name, type_annotation), e| Param {
+        name,
+        type_annotation,
+        span: e.span(),
+    });
+
+    let params = param
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::LParen), just(Token::RParen));
+
+    let return_type = just(Token::Arrow).ignore_then(type_expr).or_not();
+
+    let body = body_statement_parser()
+        .repeated()
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::Indent), just(Token::Dedent));
+
+    just(Token::Fn)
+        .ignore_then(ident)
+        .then(params)
+        .then(return_type)
+        .then_ignore(just(Token::Colon))
+        .then(body)
+        .map(|(((name, params), return_type), body)| FunctionDef {
+            name,
+            params,
+            return_type,
+            body,
+        })
 }
 
 /// Parse a variable declaration: [mut] ident [: type] = expression
@@ -144,9 +228,14 @@ where
             )
             .map_with(|(name, args), e| Expression::new(ExprKind::Call(name, args), e.span()));
 
+            let ident_expr = select! {
+                Token::Ident(name) => name.to_string()
+            }
+            .map_with(|name, e| Expression::new(ExprKind::Ident(name), e.span()));
+
             let parenthesized = expr.delimited_by(just(Token::LParen), just(Token::RParen));
 
-            call.or(literal).or(parenthesized)
+            call.or(ident_expr).or(literal).or(parenthesized)
         };
 
         // Unary operators (negation has highest precedence)
@@ -216,6 +305,7 @@ mod tests {
 
         let tokens: Vec<_> = Token::lexer(input)
             .filter_map(|result| result.ok())
+            .filter(|t| !matches!(t, Token::Newline(_)))
             .collect();
 
         let static_tokens: Vec<Token<'static>> = tokens
@@ -252,6 +342,13 @@ mod tests {
                 Token::LBrace => Token::LBrace,
                 Token::RBrace => Token::RBrace,
                 Token::Comma => Token::Comma,
+                Token::Arrow => Token::Arrow,
+                Token::Newline(s) => {
+                    let leaked_str: &'static str = Box::leak(s.to_string().into_boxed_str());
+                    Token::Newline(leaked_str)
+                }
+                Token::Indent => Token::Indent,
+                Token::Dedent => Token::Dedent,
                 Token::Comment => Token::Comment,
                 Token::Whitespace => Token::Whitespace,
                 Token::Error => Token::Error,

@@ -22,6 +22,12 @@ site/
 # VSCode
 .vscode
 
+# Zed
+.zed/
+
+# Serena (MCP plugin)
+.serena/
+
 # Mac
 .DS_Store
 

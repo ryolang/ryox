@@ -43,21 +43,49 @@ pub struct Statement {
 
 impl Statement {
     fn pretty_print_inline(&self) {
-        match &self.kind {
-            StmtKind::VarDecl(_) => {
-                print!(
-                    "Statement [VarDecl] ({}..{})",
-                    self.span.start, self.span.end
-                );
-            }
-        }
+        let label = match &self.kind {
+            StmtKind::VarDecl(_) => "VarDecl",
+            StmtKind::FunctionDef(_) => "FunctionDef",
+            StmtKind::Return(_) => "Return",
+            StmtKind::ExprStmt(_) => "ExprStmt",
+        };
+        print!(
+            "Statement [{}] ({}..{})",
+            label, self.span.start, self.span.end
+        );
     }
 
-    #[allow(unused_variables)]
     fn pretty_print_children(&self, prefix: &str) {
         match &self.kind {
             StmtKind::VarDecl(decl) => {
                 decl.pretty_print(prefix);
+            }
+            StmtKind::FunctionDef(func) => {
+                println!("{}FunctionDef: {}", prefix, func.name);
+                let inner = format!("{}  ", prefix);
+                for param in &func.params {
+                    println!(
+                        "{}├── param: {}: {}",
+                        inner, param.name, param.type_annotation
+                    );
+                }
+                if let Some(ret_ty) = &func.return_type {
+                    println!("{}├── returns: {}", inner, ret_ty);
+                }
+                println!("{}└── body:", inner);
+                for stmt in &func.body {
+                    print!("{}    ", inner);
+                    stmt.pretty_print_inline();
+                    println!();
+                }
+            }
+            StmtKind::Return(expr) => {
+                if let Some(e) = expr {
+                    e.pretty_print(prefix);
+                }
+            }
+            StmtKind::ExprStmt(expr) => {
+                expr.pretty_print(prefix);
             }
         }
     }
@@ -68,15 +96,12 @@ impl Statement {
 pub enum StmtKind {
     /// Variable declaration: [mut] name [: type] = expr
     VarDecl(VarDecl),
-}
-
-impl StmtKind {
-    /// Extract the VarDecl if this is a VarDecl statement.
-    pub fn as_var_decl(&self) -> &VarDecl {
-        match self {
-            StmtKind::VarDecl(decl) => decl,
-        }
-    }
+    /// Function definition: fn name(params) [-> type]: body
+    FunctionDef(FunctionDef),
+    /// Return statement: return [expr]
+    Return(Option<Expression>),
+    /// Expression statement: expr (evaluated for side effects)
+    ExprStmt(Expression),
 }
 
 /// A variable declaration statement.
@@ -123,6 +148,25 @@ impl VarDecl {
         self.initializer
             .pretty_print(&format!("{}    ", new_prefix));
     }
+}
+
+/// A function definition.
+/// Syntax: `fn name(params) [-> type]: body`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionDef {
+    pub name: Ident,
+    pub params: Vec<Param>,
+    pub return_type: Option<TypeExpr>,
+    pub body: Vec<Statement>,
+}
+
+/// A function parameter.
+/// Syntax: `name: type`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Param {
+    pub name: Ident,
+    pub type_annotation: TypeExpr,
+    pub span: SimpleSpan,
 }
 
 // ============================================================================
@@ -190,6 +234,7 @@ impl Expression {
                 Literal::Int(n) => format!("Literal(Int({}))", n),
                 Literal::Str(s) => format!("Literal(Str(\"{}\"))", s),
             },
+            ExprKind::Ident(name) => format!("Ident({})", name),
             ExprKind::BinaryOp(_, op, _) => format!("BinaryOp({})", op),
             ExprKind::UnaryOp(op, _) => format!("UnaryOp({})", op),
             ExprKind::Call(name, _) => format!("Call({})", name),
@@ -202,7 +247,7 @@ impl Expression {
 
         let new_prefix = format!("{}  ", prefix);
         match &self.kind {
-            ExprKind::Literal(_) => {} // Leaf node
+            ExprKind::Literal(_) | ExprKind::Ident(_) => {} // Leaf nodes
             ExprKind::BinaryOp(left, _op, right) => {
                 left.pretty_print(&format!("{}├── ", new_prefix));
                 right.pretty_print(&format!("{}└── ", new_prefix));
@@ -226,6 +271,8 @@ impl Expression {
 pub enum ExprKind {
     /// Literal value: integer, string, etc.
     Literal(Literal),
+    /// Variable reference: identifier name
+    Ident(String),
     /// Binary operation: left op right
     BinaryOp(Box<Expression>, BinaryOperator, Box<Expression>),
     /// Unary operation: op expr

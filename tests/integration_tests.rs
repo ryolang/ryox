@@ -386,3 +386,248 @@ fn test_print_empty_string() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("[Result] => 0"), "Should exit with code 0");
 }
+
+// ============================================================================
+// Milestone 4: Functions & Calls
+// ============================================================================
+
+#[test]
+fn test_fn_main_return_0() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main() -> int:\n\treturn 0\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_main_0.ryo", code);
+
+    let output = run_ryo_command(&["run", "fn_main_0.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    assert!(
+        output.status.success(),
+        "ryo run should succeed. STDERR: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_fn_main_return_42() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main() -> int:\n\treturn 42\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_main_42.ryo", code);
+
+    let output = run_ryo_command(&["run", "fn_main_42.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 42"),
+        "Should exit with code 42, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_fn_main_with_variable() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main() -> int:\n\tx = 42\n\treturn x\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_var.ryo", code);
+
+    let output =
+        run_ryo_command(&["run", "fn_var.ryo"], &test_file).expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 42"),
+        "Should exit with code 42, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_fn_add_two_functions() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code =
+        "fn add(a: int, b: int) -> int:\n\treturn a + b\n\nfn main() -> int:\n\treturn add(2, 3)\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_add.ryo", code);
+
+    let output =
+        run_ryo_command(&["run", "fn_add.ryo"], &test_file).expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 5"),
+        "add(2, 3) should exit with code 5, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_expression_statement_print() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main() -> int:\n\tprint(\"Hello\\n\")\n\treturn 0\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_print.ryo", code);
+
+    let output = run_ryo_command(&["run", "fn_print.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    assert!(
+        output.status.success(),
+        "ryo run should succeed. STDERR: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("[Result] => 0"),
+        "Should exit with code 0, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_backward_compat_flat_program() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "x = 42\ny = x + 1";
+    let test_file = create_test_file(temp_dir.path(), "flat.ryo", code);
+
+    let output =
+        run_ryo_command(&["run", "flat.ryo"], &test_file).expect("Failed to run ryo run command");
+
+    assert!(
+        output.status.success(),
+        "Flat programs should still work. STDERR: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("[Result] => 0"),
+        "Flat programs should exit with 0, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_forward_reference() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main() -> int:\n\treturn helper()\n\nfn helper() -> int:\n\treturn 10\n";
+    let test_file = create_test_file(temp_dir.path(), "forward_ref.ryo", code);
+
+    let output = run_ryo_command(&["run", "forward_ref.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 10"),
+        "Forward reference should work, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_multiple_params() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn sum3(a: int, b: int, c: int) -> int:\n\treturn a + b + c\n\nfn main() -> int:\n\treturn sum3(10, 20, 30)\n";
+    let test_file = create_test_file(temp_dir.path(), "multi_params.ryo", code);
+
+    let output = run_ryo_command(&["run", "multi_params.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 60"),
+        "sum3(10, 20, 30) should exit with 60, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_nested_calls() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn double(x: int) -> int:\n\treturn x * 2\n\nfn main() -> int:\n\treturn double(double(3))\n";
+    let test_file = create_test_file(temp_dir.path(), "nested_calls.ryo", code);
+
+    let output = run_ryo_command(&["run", "nested_calls.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 12"),
+        "double(double(3)) should exit with 12, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_arithmetic_in_function() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn compute(a: int, b: int) -> int:\n\tx = a * 2\n\ty = b + 3\n\treturn x + y\n\nfn main() -> int:\n\treturn compute(5, 7)\n";
+    let test_file = create_test_file(temp_dir.path(), "fn_arith.ryo", code);
+
+    let output = run_ryo_command(&["run", "fn_arith.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("[Result] => 20"),
+        "compute(5, 7) = 5*2 + 7+3 = 20, got stdout: {}\nstderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_top_level_with_explicit_main_error() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "x = 42\n\nfn main() -> int:\n\treturn 0\n";
+    let test_file = create_test_file(temp_dir.path(), "mixed_error.ryo", code);
+
+    let output = run_ryo_command(&["run", "mixed_error.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+
+    assert!(
+        !output.status.success(),
+        "Mixing top-level stmts with explicit main should fail"
+    );
+}
+
+#[test]
+fn test_parse_function_def() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn add(a: int, b: int) -> int:\n\treturn a + b\n";
+    let test_file = create_test_file(temp_dir.path(), "parse_fn.ryo", code);
+
+    let output = run_ryo_command(&["parse", "parse_fn.ryo"], &test_file)
+        .expect("Failed to run ryo parse command");
+
+    assert!(
+        output.status.success(),
+        "Parse should succeed. STDERR: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("FunctionDef"),
+        "AST should contain FunctionDef, got: {}",
+        stdout
+    );
+}

@@ -38,6 +38,8 @@ pub enum Token<'a> {
     // Operators - Arithmetic
     #[token("+")]
     Add,
+    #[token("->")]
+    Arrow,
     #[token("-")]
     Sub,
     #[token("*")]
@@ -63,12 +65,20 @@ pub enum Token<'a> {
     #[token(",")]
     Comma,
 
+    // Newline with leading whitespace on next line (for indentation tracking)
+    #[regex(r"\n[ \t]*")]
+    Newline(&'a str),
+
+    // Synthetic tokens (inserted by indent pre-processor, not produced by logos)
+    Indent,
+    Dedent,
+
     // Comments (skip to end of line)
     #[regex(r"#[^\n]*", logos::skip)]
     Comment,
 
-    // Whitespace (skip)
-    #[regex(r"[ \t\f\n]+", logos::skip)]
+    // Whitespace (skip inline whitespace only, newlines handled separately)
+    #[regex(r"[ \t\f]+", logos::skip)]
     Whitespace,
 }
 
@@ -94,6 +104,7 @@ impl fmt::Display for Token<'_> {
 
             // Operators - Arithmetic
             Self::Add => write!(f, "+"),
+            Self::Arrow => write!(f, "->"),
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
@@ -108,6 +119,11 @@ impl fmt::Display for Token<'_> {
             Self::LBrace => write!(f, "{{"),
             Self::RBrace => write!(f, "}}"),
             Self::Comma => write!(f, ","),
+
+            // Newline and Indentation
+            Self::Newline(_) => write!(f, "<newline>"),
+            Self::Indent => write!(f, "<indent>"),
+            Self::Dedent => write!(f, "<dedent>"),
 
             // Comments and Whitespace
             Self::Comment => write!(f, "<comment>"),
@@ -228,7 +244,24 @@ mod tests {
         let tokens = tokenize("fn add(a: int, b: int) -> int:");
         assert!(tokens.iter().any(|t| matches!(t, Token::Fn)));
         assert!(tokens.iter().any(|t| matches!(t, Token::Ident("add"))));
+        assert!(tokens.iter().any(|t| t == &Token::Arrow));
         assert!(tokens.iter().any(|t| t == &Token::Colon));
+    }
+
+    #[test]
+    fn lex_arrow_token() {
+        let tokens = tokenize("->");
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0], Token::Arrow);
+    }
+
+    #[test]
+    fn lex_arrow_vs_minus() {
+        let tokens = tokenize("-> - ->");
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0], Token::Arrow);
+        assert_eq!(tokens[1], Token::Sub);
+        assert_eq!(tokens[2], Token::Arrow);
     }
 
     #[test]
@@ -273,13 +306,14 @@ mod tests {
     #[test]
     fn lex_newline_handling() {
         let tokens = tokenize("x = 5\ny = 10");
-        assert_eq!(tokens.len(), 6);
+        assert_eq!(tokens.len(), 7);
         assert!(matches!(tokens[0], Token::Ident("x")));
         assert_eq!(tokens[1], Token::Assign);
         assert!(matches!(tokens[2], Token::Int("5")));
-        assert!(matches!(tokens[3], Token::Ident("y")));
-        assert_eq!(tokens[4], Token::Assign);
-        assert!(matches!(tokens[5], Token::Int("10")));
+        assert!(matches!(tokens[3], Token::Newline(_)));
+        assert!(matches!(tokens[4], Token::Ident("y")));
+        assert_eq!(tokens[5], Token::Assign);
+        assert!(matches!(tokens[6], Token::Int("10")));
     }
 
     #[test]

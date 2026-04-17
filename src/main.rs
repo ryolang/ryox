@@ -12,6 +12,7 @@ use target_lexicon::Triple;
 mod ast;
 mod codegen;
 mod evaluator;
+mod indent;
 mod lexer;
 mod parser;
 
@@ -31,8 +32,8 @@ fn get_output_filenames(input_file: &Path) -> (String, String) {
     (obj_filename, exe_filename)
 }
 
-// Custom error types
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 enum CompilerError {
     IoError(std::io::Error),
     ParseError(String),
@@ -150,13 +151,19 @@ fn read_source_file(file: &Path) -> Result<String, CompilerError> {
 }
 
 fn parse_source(input: &str) -> Result<ast::Program, CompilerError> {
-    let token_iter = Token::lexer(input).spanned().map(|(tok, span)| match tok {
-        Ok(tok) => (tok, span.into()),
-        Err(()) => (Token::Error, span.into()),
-    });
+    let raw_tokens: Vec<_> = Token::lexer(input)
+        .spanned()
+        .map(|(tok, span)| match tok {
+            Ok(tok) => (tok, span.into()),
+            Err(()) => (Token::Error, span.into()),
+        })
+        .collect();
+
+    let tokens =
+        indent::process(raw_tokens).map_err(|e| CompilerError::ParseError(e.to_string()))?;
 
     let token_stream =
-        Stream::from_iter(token_iter).map((0..input.len()).into(), |(t, s): (_, _)| (t, s));
+        Stream::from_iter(tokens).map((0..input.len()).into(), |(t, s): (_, _)| (t, s));
 
     match program_parser().parse(token_stream).into_result() {
         Ok(program) => Ok(program),
