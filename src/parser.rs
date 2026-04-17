@@ -296,6 +296,7 @@ where
 #[allow(irrefutable_let_patterns)]
 mod tests {
     use super::*;
+    use crate::lexer::leak_token;
     use chumsky::Parser;
     use chumsky::input::Stream;
     use logos::Logos;
@@ -308,52 +309,8 @@ mod tests {
             .filter(|t| !matches!(t, Token::Newline(_)))
             .collect();
 
-        let static_tokens: Vec<Token<'static>> = tokens
-            .into_iter()
-            .map(|t| match t {
-                Token::Int(s) => {
-                    let leaked_str: &'static str = Box::leak(s.to_string().into_boxed_str());
-                    Token::Int(leaked_str)
-                }
-                Token::Str(s) => {
-                    let leaked_str: &'static str = Box::leak(s.to_string().into_boxed_str());
-                    Token::Str(leaked_str)
-                }
-                Token::Ident(s) => {
-                    let leaked_str: &'static str = Box::leak(s.to_string().into_boxed_str());
-                    Token::Ident(leaked_str)
-                }
-                Token::Fn => Token::Fn,
-                Token::If => Token::If,
-                Token::Else => Token::Else,
-                Token::Return => Token::Return,
-                Token::Mut => Token::Mut,
-                Token::Struct => Token::Struct,
-                Token::Enum => Token::Enum,
-                Token::Match => Token::Match,
-                Token::Add => Token::Add,
-                Token::Sub => Token::Sub,
-                Token::Mul => Token::Mul,
-                Token::Div => Token::Div,
-                Token::Assign => Token::Assign,
-                Token::Colon => Token::Colon,
-                Token::LParen => Token::LParen,
-                Token::RParen => Token::RParen,
-                Token::LBrace => Token::LBrace,
-                Token::RBrace => Token::RBrace,
-                Token::Comma => Token::Comma,
-                Token::Arrow => Token::Arrow,
-                Token::Newline(s) => {
-                    let leaked_str: &'static str = Box::leak(s.to_string().into_boxed_str());
-                    Token::Newline(leaked_str)
-                }
-                Token::Indent => Token::Indent,
-                Token::Dedent => Token::Dedent,
-                Token::Comment => Token::Comment,
-                Token::Whitespace => Token::Whitespace,
-                Token::Error => Token::Error,
-            })
-            .collect();
+        let static_tokens: Vec<Token<'static>> =
+            tokens.into_iter().map(|t| leak_token(t)).collect();
 
         program_parser()
             .parse(Stream::from_iter(static_tokens))

@@ -11,7 +11,6 @@ use target_lexicon::Triple;
 
 mod ast;
 mod codegen;
-mod evaluator;
 mod hir;
 mod indent;
 mod lexer;

@@ -134,6 +134,41 @@ impl fmt::Display for Token<'_> {
 }
 
 #[cfg(test)]
+pub(crate) fn leak_token<'a>(tok: Token<'a>) -> Token<'static> {
+    match tok {
+        Token::Int(s) => Token::Int(Box::leak(s.to_string().into_boxed_str())),
+        Token::Str(s) => Token::Str(Box::leak(s.to_string().into_boxed_str())),
+        Token::Ident(s) => Token::Ident(Box::leak(s.to_string().into_boxed_str())),
+        Token::Newline(s) => Token::Newline(Box::leak(s.to_string().into_boxed_str())),
+        Token::Fn => Token::Fn,
+        Token::If => Token::If,
+        Token::Else => Token::Else,
+        Token::Return => Token::Return,
+        Token::Mut => Token::Mut,
+        Token::Struct => Token::Struct,
+        Token::Enum => Token::Enum,
+        Token::Match => Token::Match,
+        Token::Add => Token::Add,
+        Token::Arrow => Token::Arrow,
+        Token::Sub => Token::Sub,
+        Token::Mul => Token::Mul,
+        Token::Div => Token::Div,
+        Token::Assign => Token::Assign,
+        Token::Colon => Token::Colon,
+        Token::LParen => Token::LParen,
+        Token::RParen => Token::RParen,
+        Token::LBrace => Token::LBrace,
+        Token::RBrace => Token::RBrace,
+        Token::Comma => Token::Comma,
+        Token::Indent => Token::Indent,
+        Token::Dedent => Token::Dedent,
+        Token::Comment => Token::Comment,
+        Token::Whitespace => Token::Whitespace,
+        Token::Error => Token::Error,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
