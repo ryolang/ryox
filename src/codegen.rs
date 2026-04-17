@@ -86,6 +86,34 @@ impl Codegen {
             .ok_or_else(|| "No main function defined".to_string())
     }
 
+    pub fn compile_and_dump_ir(&mut self, program: &HirProgram) -> Result<String, String> {
+        let mut func_ids: HashMap<String, FuncId> = HashMap::new();
+
+        for func in &program.functions {
+            let sig = self.build_signature(func);
+            let linkage = if func.name == "main" {
+                Linkage::Export
+            } else {
+                Linkage::Local
+            };
+            let func_id = self
+                .module
+                .declare_function(&func.name, linkage, &sig)
+                .map_err(|e| format!("Failed to declare function '{}': {}", func.name, e))?;
+            func_ids.insert(func.name.clone(), func_id);
+        }
+
+        let mut ir_output = String::new();
+        for func in &program.functions {
+            if let Some(ir) = self.compile_function(func, &func_ids)? {
+                ir_output.push_str(&ir);
+                ir_output.push('\n');
+            }
+        }
+
+        Ok(ir_output)
+    }
+
     fn build_signature(&self, func: &HirFunction) -> Signature {
         let mut sig = self.module.make_signature();
         for _ in &func.params {
@@ -101,7 +129,7 @@ impl Codegen {
         &mut self,
         func: &HirFunction,
         func_ids: &HashMap<String, FuncId>,
-    ) -> Result<(), String> {
+    ) -> Result<Option<String>, String> {
         let func_id = *func_ids
             .get(&func.name)
             .ok_or_else(|| format!("Function '{}' not declared", func.name))?;
@@ -195,12 +223,14 @@ impl Codegen {
             builder.finalize();
         }
 
+        let ir_text = format!("{}", self.ctx.func);
+
         self.module
             .define_function(func_id, &mut self.ctx)
             .map_err(|e| format!("Failed to define function '{}': {}", func.name, e))?;
 
         self.ctx.clear();
-        Ok(())
+        Ok(Some(ir_text))
     }
 
     fn store_string(

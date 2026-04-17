@@ -218,21 +218,14 @@ fn ir_command(file: &Path) -> Result<(), CompilerError> {
 }
 
 fn generate_and_display_ir(hir: &hir::HirProgram) -> Result<(), CompilerError> {
-    println!("[Cranelift IR]");
-
     let target = Triple::host();
-    let target_str = target.to_string();
     let mut codegen = codegen::Codegen::new(target).map_err(CompilerError::CodegenError)?;
+    let ir = codegen
+        .compile_and_dump_ir(hir)
+        .map_err(CompilerError::CodegenError)?;
 
-    codegen.compile(hir).map_err(CompilerError::CodegenError)?;
-
-    println!("IR generation successful");
-    println!("Target: {}", target_str);
-    println!("Module name: ryo_module");
-    println!("Main function: Signature -> i64 (exit code)");
-    println!();
-    println!("Note: Full IR display requires Cranelift context visibility");
-    println!("The program has been successfully compiled to Cranelift IR");
+    println!("[Cranelift IR]");
+    print!("{}", ir);
 
     Ok(())
 }
