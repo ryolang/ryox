@@ -39,9 +39,9 @@ The Ryo compiler currently implements **Milestone 4: Functions, HIR, & AOT Compi
 
 **Try it now:** [Quick Start Guide](docs/quickstart.md) - Build and run your first Ryo program in 5 minutes!
 
-## Quick Installation (Nightly Builds)
+## Quick Installation (Latest Build)
 
-The easiest way to try Ryo is using our nightly builds:
+The easiest way to try Ryo is using our latest build:
 
 ```bash
 # Download and run the installer
@@ -54,7 +54,7 @@ export PATH="$HOME/.ryo/bin:$PATH"
 ryo --version
 ```
 
-**Note:** Nightly builds are manually triggered and contain the latest features. They may be unstable. You can also build from source (below).
+**Note:** Latest build is manually triggered and contain the latest features. They may be unstable. You can also build from source (below).
 
 
 ## Features Overview
