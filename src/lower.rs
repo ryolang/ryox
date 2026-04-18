@@ -433,7 +433,11 @@ mod tests {
         // Top-level statements (other than function definitions) are not allowed when main() exists
         let result = parse_and_lower("x = 42\n\nfn main() -> int:\n\treturn 0\n");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Top-level statements are not allowed"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Top-level statements are not allowed")
+        );
     }
 
     #[test]
