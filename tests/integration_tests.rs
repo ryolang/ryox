@@ -9,7 +9,7 @@ fn run_ryo_command(
     file_path: &Path,
 ) -> Result<std::process::Output, std::io::Error> {
     let mut cmd = Command::new("cargo");
-    cmd.args(&["run", "--"])
+    cmd.args(["run", "--"])
         .args(&args[..args.len() - 1]) // All args except the filename
         .arg(file_path); // Use absolute path for the file
     cmd.output()

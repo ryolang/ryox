@@ -20,13 +20,6 @@ impl<'a> Scope<'a> {
         }
     }
 
-    fn child(parent: &'a Scope<'a>) -> Self {
-        Scope {
-            parent: Some(parent),
-            bindings: HashMap::new(),
-        }
-    }
-
     fn insert(&mut self, name: String, ty: Type) {
         self.bindings.insert(name, ty);
     }
