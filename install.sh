@@ -145,13 +145,14 @@ fi
 
 echo "${YELLOW}Fetching latest release...${NC}"
 
+API="https://api.github.com/repos/${REPO}/releases"
 if [ -n "$RELEASE_TAG" ]; then
-    TAG="$RELEASE_TAG"
+    RELEASE_JSON=$(curl -s "${API}/tags/${RELEASE_TAG}")
 else
-    TAG=$(curl -s "https://api.github.com/repos/${REPO}/releases" \
-        | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"tag_name": *"//;s/"//')
+    RELEASE_JSON=$(curl -s "${API}?per_page=1")
 fi
 
+TAG=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"tag_name": *"//;s/"//')
 if [ -z "$TAG" ]; then
     echo "${RED}No release found${NC}" >&2
     echo "Run the release workflow manually on GitHub first:" >&2
@@ -160,8 +161,11 @@ if [ -z "$TAG" ]; then
 fi
 echo "${GREEN}Found release: ${TAG}${NC}"
 
-HASH=$(echo "$TAG" | sed 's/^latest-//')
-ASSET_NAME="${TARGET}-${HASH}.tar.gz"
+ASSET_NAME=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/.*\///' | sed 's/"//' | grep "^${TARGET}-.*\.tar\.gz$" | head -1)
+if [ -z "$ASSET_NAME" ]; then
+    echo "${RED}No matching asset found for ${TARGET}${NC}" >&2
+    exit 1
+fi
 ASSET_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
 echo "${YELLOW}Found asset: $ASSET_NAME${NC}"
