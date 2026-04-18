@@ -9,8 +9,8 @@ fn main() {
     let short_hash = get_git_short_hash();
     let commit_date = get_git_commit_date();
     let version = match (short_hash, commit_date) {
-        (Some(hash), Some(date)) => format!("{pkg_version}-dev ({hash} {date})"),
-        (Some(hash), None) => format!("{pkg_version}-dev ({hash})"),
+        (Some(hash), Some(date)) => format!("{pkg_version}-dev.{date}+{hash}"),
+        (Some(hash), None) => format!("{pkg_version}-dev+{hash}"),
         _ => pkg_version,
     };
     println!("cargo:rustc-env=RYO_VERSION={version}");
@@ -42,7 +42,7 @@ fn get_git_short_hash() -> Option<String> {
 
 fn get_git_commit_date() -> Option<String> {
     let output = std::process::Command::new("git")
-        .args(["log", "-1", "--format=%cs"])
+        .args(["log", "-1", "--format=%cd", "--date=format:%Y%m%d"])
         .output()
         .ok()?;
     if output.status.success() {

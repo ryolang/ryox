@@ -32,15 +32,15 @@ jobs:
         id: info
         run: |
           echo "short_hash=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u '+%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
 
       - name: Check existing release
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FORCE: ${{ inputs.force }}
+          TAG: dev-${{ steps.info.outputs.date }}-${{ steps.info.outputs.short_hash }}
         run: |
-          TAG="nightly-${{ steps.info.outputs.date }}"
           if [[ "$FORCE" == "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -120,7 +120,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for tag in $(gh release list --limit 10 --json tagName --jq '.[].tagName | select(startswith("nightly-") or startswith("latest-"))'); do
+          for tag in $(gh release list --limit 10 --json tagName --jq '.[].tagName | select(startswith("dev-"))'); do
             echo "Deleting release: $tag"
             gh release delete "$tag" --yes --cleanup-tag
           done
@@ -132,8 +132,8 @@ jobs:
           DATE: ${{ needs.check.outputs.date }}
           REPO_NAME: ${{ github.repository }}
         run: |
-          TAG="nightly-${DATE}"
-          NOTES="Nightly build from \`main\` at ${SHORT_HASH} (${DATE}).
+          TAG="dev-${DATE}-${SHORT_HASH}"
+          NOTES="Dev build from \`main\` at ${SHORT_HASH} (${DATE}).
 
           Install:
           \`\`\`sh
@@ -147,4 +147,4 @@ jobs:
           done
 
           gh release create "$TAG" "${ASSETS[@]}" \
-            --title "Nightly ${DATE}" --prerelease --notes "$NOTES"
+            --title "Dev ${DATE} (${SHORT_HASH})" --prerelease --notes "$NOTES"
