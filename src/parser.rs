@@ -8,12 +8,8 @@ fn skip_newlines<'a, I>() -> impl Parser<'a, I, (), extra::Err<Rich<'a, Token<'a
 where
     I: ValueInput<'a, Token = Token<'a>, Span = SimpleSpan>,
 {
-    select! { Token::Newline(_) => () }
-        .repeated()
-        .to(())
+    select! { Token::Newline(_) => () }.repeated().to(())
 }
-
-
 
 /// Unescape a string literal (handle \n, \t, \", \\, etc.)
 fn unescape_string(s: &str) -> String {
@@ -56,7 +52,7 @@ where
                 .then(skip_newlines())
                 .repeated()
                 .collect::<Vec<_>>()
-                .map(|v| v.into_iter().map(|(s, _)| s).collect::<Vec<_>>())
+                .map(|v| v.into_iter().map(|(s, _)| s).collect::<Vec<_>>()),
         )
         .then_ignore(skip_newlines())
         .then_ignore(end())
@@ -101,7 +97,8 @@ where
 
 /// Parse a top-level statement (no expression statements allowed at module level)
 /// Only function definitions and variable declarations are valid
-fn top_level_statement_parser<'a, I>() -> impl Parser<'a, I, Statement, extra::Err<Rich<'a, Token<'a>>>> + 'a
+fn top_level_statement_parser<'a, I>()
+-> impl Parser<'a, I, Statement, extra::Err<Rich<'a, Token<'a>>>> + 'a
 where
     I: ValueInput<'a, Token = Token<'a>, Span = SimpleSpan>,
 {
@@ -169,9 +166,12 @@ where
                 .repeated()
                 .at_least(1)
                 .collect::<Vec<_>>()
-                .map(|v| v.into_iter().map(|(s, _)| s).collect::<Vec<_>>())
+                .map(|v| v.into_iter().map(|(s, _)| s).collect::<Vec<_>>()),
         )
-        .delimited_by(skip_newlines().ignore_then(just(Token::Indent)), just(Token::Dedent));
+        .delimited_by(
+            skip_newlines().ignore_then(just(Token::Indent)),
+            just(Token::Dedent),
+        );
 
     just(Token::Fn)
         .ignore_then(ident)
@@ -341,8 +341,8 @@ mod tests {
     use logos::Logos;
 
     fn lex_and_parse(input: &str) -> Result<Program, Vec<Rich<'static, Token<'static>>>> {
-        use crate::lexer::Token;
         use crate::indent;
+        use crate::lexer::Token;
 
         let raw_tokens: Vec<_> = Token::lexer(input)
             .spanned()
@@ -352,13 +352,16 @@ mod tests {
             })
             .collect();
 
-        let tokens = indent::process(raw_tokens).map_err(|e| vec![Rich::custom(SimpleSpan::new((), 0..0), e)])?;
+        let tokens = indent::process(raw_tokens)
+            .map_err(|e| vec![Rich::custom(SimpleSpan::new((), 0..0), e)])?;
 
-        let static_tokens: Vec<(Token<'static>, SimpleSpan)> =
-            tokens.into_iter().map(|(t, s)| (leak_token(t), s)).collect();
+        let static_tokens: Vec<(Token<'static>, SimpleSpan)> = tokens
+            .into_iter()
+            .map(|(t, s)| (leak_token(t), s))
+            .collect();
 
-        let token_stream = Stream::from_iter(static_tokens)
-            .map((0..input.len()).into(), |(t, s): (_, _)| (t, s));
+        let token_stream =
+            Stream::from_iter(static_tokens).map((0..input.len()).into(), |(t, s): (_, _)| (t, s));
 
         program_parser()
             .parse(token_stream)

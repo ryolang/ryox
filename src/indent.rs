@@ -38,7 +38,7 @@ pub fn process<'a>(tokens: Vec<Spanned<'a>>) -> Result<Vec<Spanned<'a>>, String>
                 }
             }
             // Always push the newline token for the parser
-            result.push((Token::Newline(*s), *span));
+            result.push((Token::Newline(s), *span));
         } else {
             result.push((tok.clone(), *span));
         }

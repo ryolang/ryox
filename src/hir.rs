@@ -40,6 +40,7 @@ pub struct HirParam {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum HirStmt {
     VarDecl {
         name: String,
@@ -53,6 +54,7 @@ pub enum HirStmt {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HirExpr {
     pub kind: HirExprKind,
     pub ty: Type,

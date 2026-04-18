@@ -2,11 +2,10 @@
 set -e
 
 # Configuration
-REPO="pepe/ryox"
-RELEASE_TAG="nightly"
+REPO="ryolang/ryox"
+RELEASE_TAG="latest"
 INSTALL_DIR="$HOME/.ryo/bin"
 BINARY_NAME="ryo"
-GITHUB_API="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -45,7 +44,7 @@ done
 show_help() {
     echo "Usage: $(basename "$0") [OPTIONS]"
     echo ""
-    echo "Installs the latest Ryo nightly build from GitHub."
+    echo "Installs the latest Ryo build from GitHub."
     echo ""
     echo "Options:"
     echo "  --prefix=DIR    Install to DIR instead of ~/.ryo/bin"
@@ -54,8 +53,8 @@ show_help() {
     echo "  --help, -h     Show this help message"
     echo ""
     echo "Environment variables:"
-    echo "  RYO_REPO       GitHub repository (default: pepe/ryox)"
-    echo "  RYO_RELEASE    Release tag (default: nightly)"
+    echo "  RYO_REPO       GitHub repository (default: ryolang/ryox)"
+    echo "  RYO_RELEASE    Release tag (default: latest)"
     echo ""
     exit 0
 }
@@ -67,6 +66,7 @@ fi
 # Allow override via environment
 REPO="${RYO_REPO:-$REPO}"
 RELEASE_TAG="${RYO_RELEASE:-$RELEASE_TAG}"
+GITHUB_API="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}"
 
 # Determine OS and architecture
 OS="$(uname -s)"
@@ -137,16 +137,17 @@ if [ -f "$BINARY_PATH" ]; then
     fi
 fi
 
-echo "${YELLOW}Fetching latest nightly release...${NC}"
+echo "${YELLOW}Fetching latest release...${NC}"
 RELEASE_JSON=$(curl -s "$GITHUB_API")
 
 # Check if release exists
-if echo "$RELEASE_JSON" | grep -q '"tag_name": "nightly"'; then
-    echo "${GREEN}Found nightly release${NC}"
+ACTUAL_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty')
+if [ "$ACTUAL_TAG" = "$RELEASE_TAG" ]; then
+    echo "${GREEN}Found release${NC}"
 else
-    echo "${RED}No nightly release found${NC}" >&2
-    echo "Run the nightly build workflow manually on GitHub first:" >&2
-    echo "  https://github.com/${REPO}/actions/workflows/nightly.yml" >&2
+    echo "${RED}No release found for tag '${RELEASE_TAG}'${NC}" >&2
+    echo "Run the release workflow manually on GitHub first:" >&2
+    echo "  https://github.com/${REPO}/actions/workflows/release.yml" >&2
     exit 1
 fi
 
@@ -212,10 +213,10 @@ echo "  Location: $BINARY_PATH"
 echo ""
 echo "${YELLOW}Next steps:${NC}"
 echo "  1. Add to your PATH:"
-echo "     export PATH=\"\$HOME/.ryo/bin:\\(PATH\""
+echo "     export PATH=\"\$HOME/.ryo/bin:\$PATH\""
 echo ""
 echo "  2. Test the installation:"
 echo "     ryo --version"
 echo "     ryo run examples/hello.ryo"
 echo ""
-echo "  3. Add the PATH line to your shell config (eller .bashrc, .zshrc, etc.)"
+echo "  3. Add the PATH line to your shell config (.bashrc, .zshrc, etc.)"
