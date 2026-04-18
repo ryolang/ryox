@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if commit unchanged"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Check if build needed
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      short_hash: ${{ steps.info.outputs.short_hash }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commit info
+        id: info
+        run: |
+          SHORT_HASH=$(git rev-parse --short=7 HEAD)
+          echo "short_hash=${SHORT_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHORT_HASH="${{ steps.info.outputs.short_hash }}"
+          if [[ "$FORCE" == "true" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RELEASE_JSON=$(gh api "repos/${REPO}/releases/tags/latest" 2>/dev/null || echo "")
+          if [[ -z "$RELEASE_JSON" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$RELEASE_JSON" | jq -e --arg hash "$SHORT_HASH" \
+            '.assets[] | select(.name | contains($hash))' > /dev/null 2>&1; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: commit $SHORT_HASH already built"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.artifact_name }})
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: ryo-linux-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: ryo-macos-arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-release-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-release-${{ matrix.target }}-
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        env:
+          ARTIFACT_NAME: ${{ matrix.artifact_name }}
+          TARGET: ${{ matrix.target }}
+          SHORT_HASH: ${{ needs.check.outputs.short_hash }}
+        run: |
+          ASSET_NAME="${ARTIFACT_NAME}-${SHORT_HASH}.tar.gz"
+          mkdir staging
+          cp "target/${TARGET}/release/ryo" staging/ryo
+          tar czf "${ASSET_NAME}" -C staging ryo
+          echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ env.ASSET_NAME }}
+          retention-days: 1
+
+  release:
+    name: Publish release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHORT_HASH: ${{ needs.check.outputs.short_hash }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          NOTES="Latest build from \`main\` at ${SHORT_HASH}.
+
+          Built: $(date -u '+%Y-%m-%d %H:%M UTC')
+
+          Install:
+          \`\`\`sh
+          curl -fsSL https://raw.githubusercontent.com/${REPO_NAME}/main/install.sh | sh
+          \`\`\`"
+
+          if gh release view latest > /dev/null 2>&1; then
+            gh release edit latest --title "Latest Build" --notes "$NOTES"
+          else
+            gh release create latest --title "Latest Build" --prerelease --notes "$NOTES"
+          fi
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for asset in artifacts/**/*.tar.gz; do
+            echo "Uploading ${asset}..."
+            gh release upload latest "${asset}" --clobber
+          done
+
+      - name: Clean up old assets (keep latest per platform)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHORT_HASH: ${{ needs.check.outputs.short_hash }}
+          REPO: ${{ github.repository }}
+        run: |
+          ASSETS=$(gh api "repos/${REPO}/releases/tags/latest" --jq '.assets[] | "\(.id) \(.name)"')
+          echo "$ASSETS" | while read -r id name; do
+            if [[ "$name" == *.tar.gz ]] && [[ "$name" != *"$SHORT_HASH"* ]]; then
+              echo "Removing old asset: $name"
+              gh api "repos/${REPO}/releases/assets/${id}" --method DELETE
+            fi
+          done

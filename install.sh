@@ -2,8 +2,8 @@
 set -e
 
 # Configuration
-REPO="pepe/ryox"
-RELEASE_TAG="nightly"
+REPO="ryolang/ryox"
+RELEASE_TAG="latest"
 INSTALL_DIR="$HOME/.ryo/bin"
 BINARY_NAME="ryo"
 GITHUB_API="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}"
@@ -45,7 +45,7 @@ done
 show_help() {
     echo "Usage: $(basename "$0") [OPTIONS]"
     echo ""
-    echo "Installs the latest Ryo nightly build from GitHub."
+    echo "Installs the latest Ryo build from GitHub."
     echo ""
     echo "Options:"
     echo "  --prefix=DIR    Install to DIR instead of ~/.ryo/bin"
@@ -55,7 +55,7 @@ show_help() {
     echo ""
     echo "Environment variables:"
     echo "  RYO_REPO       GitHub repository (default: pepe/ryox)"
-    echo "  RYO_RELEASE    Release tag (default: nightly)"
+    echo "  RYO_RELEASE    Release tag (default: latest)"
     echo ""
     exit 0
 }
@@ -137,16 +137,16 @@ if [ -f "$BINARY_PATH" ]; then
     fi
 fi
 
-echo "${YELLOW}Fetching latest nightly release...${NC}"
+echo "${YELLOW}Fetching latest release...${NC}"
 RELEASE_JSON=$(curl -s "$GITHUB_API")
 
 # Check if release exists
-if echo "$RELEASE_JSON" | grep -q '"tag_name": "nightly"'; then
-    echo "${GREEN}Found nightly release${NC}"
+if echo "$RELEASE_JSON" | grep -q '"tag_name": "latest"'; then
+    echo "${GREEN}Found release${NC}"
 else
-    echo "${RED}No nightly release found${NC}" >&2
-    echo "Run the nightly build workflow manually on GitHub first:" >&2
-    echo "  https://github.com/${REPO}/actions/workflows/nightly.yml" >&2
+    echo "${RED}No release found${NC}" >&2
+    echo "Run the release workflow manually on GitHub first:" >&2
+    echo "  https://github.com/${REPO}/actions/workflows/release.yml" >&2
     exit 1
 fi
 
@@ -212,10 +212,10 @@ echo "  Location: $BINARY_PATH"
 echo ""
 echo "${YELLOW}Next steps:${NC}"
 echo "  1. Add to your PATH:"
-echo "     export PATH=\"\$HOME/.ryo/bin:\\(PATH\""
+echo "     export PATH=\"\$HOME/.ryo/bin:\$PATH\""
 echo ""
 echo "  2. Test the installation:"
 echo "     ryo --version"
 echo "     ryo run examples/hello.ryo"
 echo ""
-echo "  3. Add the PATH line to your shell config (eller .bashrc, .zshrc, etc.)"
+echo "  3. Add the PATH line to your shell config (.bashrc, .zshrc, etc.)"
