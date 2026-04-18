@@ -6,7 +6,6 @@ REPO="ryolang/ryox"
 RELEASE_TAG="latest"
 INSTALL_DIR="$HOME/.ryo/bin"
 BINARY_NAME="ryo"
-GITHUB_API="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -54,7 +53,7 @@ show_help() {
     echo "  --help, -h     Show this help message"
     echo ""
     echo "Environment variables:"
-    echo "  RYO_REPO       GitHub repository (default: pepe/ryox)"
+    echo "  RYO_REPO       GitHub repository (default: ryolang/ryox)"
     echo "  RYO_RELEASE    Release tag (default: latest)"
     echo ""
     exit 0
@@ -67,6 +66,7 @@ fi
 # Allow override via environment
 REPO="${RYO_REPO:-$REPO}"
 RELEASE_TAG="${RYO_RELEASE:-$RELEASE_TAG}"
+GITHUB_API="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}"
 
 # Determine OS and architecture
 OS="$(uname -s)"
@@ -141,10 +141,11 @@ echo "${YELLOW}Fetching latest release...${NC}"
 RELEASE_JSON=$(curl -s "$GITHUB_API")
 
 # Check if release exists
-if echo "$RELEASE_JSON" | grep -q '"tag_name": "latest"'; then
+ACTUAL_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty')
+if [ "$ACTUAL_TAG" = "$RELEASE_TAG" ]; then
     echo "${GREEN}Found release${NC}"
 else
-    echo "${RED}No release found${NC}" >&2
+    echo "${RED}No release found for tag '${RELEASE_TAG}'${NC}" >&2
     echo "Run the release workflow manually on GitHub first:" >&2
     echo "  https://github.com/${REPO}/actions/workflows/release.yml" >&2
     exit 1
