@@ -52,9 +52,12 @@ export PATH="$HOME/.ryo/bin:$PATH"
 
 # Verify installation
 ryo --version
+
+# Update to the latest nightly
+curl -fsSL https://raw.githubusercontent.com/ryolang/ryox/main/install.sh | sh -s -- --force
 ```
 
-**Note:** Latest build is manually triggered and contain the latest features. They may be unstable. You can also build from source (below).
+**Note:** Nightly builds are manually triggered and contain the latest features. They may be unstable. You can also build from source (below).
 
 
 ## Features Overview

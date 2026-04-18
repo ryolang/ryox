@@ -202,9 +202,9 @@ if ! tar xzf "$TMP_FILE" -C "$TMP_DIR"; then
     exit 1
 fi
 
-EXTRACTED_BINARY=$(find "$TMP_DIR" -type f -name "ryo" -not -name "*.tar.gz" | head -1)
+EXTRACTED_BINARY="$TMP_DIR/ryo"
 
-if [ -z "$EXTRACTED_BINARY" ] || [ ! -f "$EXTRACTED_BINARY" ]; then
+if [ ! -f "$EXTRACTED_BINARY" ]; then
     echo "${RED}Binary 'ryo' not found in archive${NC}" >&2
     echo "Contents of archive:" >&2
     ls -la "$TMP_DIR" >&2
