@@ -154,10 +154,9 @@ jobs:
           \`\`\`"
 
           if gh release view latest > /dev/null 2>&1; then
-            gh release edit latest --title "Latest Build" --notes "$NOTES"
-          else
-            gh release create latest --title "Latest Build" --prerelease --notes "$NOTES"
+            gh release delete latest --yes --cleanup-tag=false
           fi
+          gh release create latest --title "Latest Build" --prerelease --notes "$NOTES"
 
       - name: Upload assets
         env:
@@ -167,18 +166,4 @@ jobs:
           for asset in artifacts/**/*.tar.gz; do
             echo "Uploading ${asset}..."
             gh release upload latest "${asset}" --clobber
-          done
-
-      - name: Clean up old assets (keep latest per platform)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHORT_HASH: ${{ needs.check.outputs.short_hash }}
-          REPO: ${{ github.repository }}
-        run: |
-          ASSETS=$(gh api "repos/${REPO}/releases/tags/latest" --jq '.assets[] | "\(.id) \(.name)"')
-          echo "$ASSETS" | while read -r id name; do
-            if [[ "$name" == *.tar.gz ]] && [[ "$name" != *"$SHORT_HASH"* ]]; then
-              echo "Removing old asset: $name"
-              gh api "repos/${REPO}/releases/assets/${id}" --method DELETE
-            fi
           done
