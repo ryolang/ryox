@@ -1390,6 +1390,100 @@ The Ryo Ownership Model is a four-layered system:
 
 All four layers work together to deliver Ryo's promise: **memory safety that feels like Python.**
 
+### 5.9 Avoiding Unnecessary Copies
+
+Ryo's "clone on return" framing is misleading in practice: several
+language- and library-level techniques combine to make most return
+paths zero-copy or near-zero-copy, without lifetime annotations.
+
+This section is a reference for idiomatic copy-avoidance. When a
+performance-critical code path allocates more than expected, these
+are the tools in order of preference.
+
+#### Guaranteed by the compiler
+
+1. **Return value optimization.** When a function returns a locally
+   constructed owned value, the compiler writes that value directly
+   into the caller's destination slot. No copy, no temporary.
+   *(See `docs/dev/copy_elision.md` for the exact rules.)*
+
+2. **Move semantics cost a pointer move, not a data copy.** Owned
+   types like `str` and `list[T]` are fat pointers (pointer + length
+   + capacity). Moving them between scopes is a register-to-register
+   transfer.
+
+#### Idiomatic techniques
+
+3. **Use `&mut` for in-place mutation.** When a function modifies
+   data rather than producing a new value, take `&mut` instead of
+   consuming and returning. See Section 5.2.1 for the full decision
+   rule between `&mut` and `move`.
+
+   ```ryo
+   fn add_header(buf: &mut str, header: str):
+   	buf.push_str(header)
+   	buf.push('\n')
+   ```
+
+4. **Use move-in / move-out for incremental building.** When the
+   caller wants to hand off a buffer for the callee to fill (the
+   "sink parameter" pattern, documented in Section 5.2.1):
+
+   ```ryo
+   fn append_header(move buf: str, header: str) -> str:
+   	buf.push_str(header)
+   	buf.push('\n')
+   	return buf
+   ```
+
+   The `buf` travels through the callee without being copied.
+
+5. **Use `shared[T]` for read-heavy fanout.** When many holders need
+   read-only access to the same value — configuration, parsed ASTs,
+   loaded assets — `shared[T]` hands out cheap refcounted handles
+   instead of clones. See Section 5.6.
+
+6. **Use scope-locked views for transformation chains.** Chained
+   transformations (`filter → map → collect`) allocate only at the
+   terminal `collect()`. See Section 5.7.
+
+#### Stdlib-level optimizations
+
+These are implementation details of the standard library, not
+language features, but they affect real-world copy behavior:
+
+7. **Small-string optimization.** `str` values below a threshold are
+   stored inline in the fat pointer, eliminating heap allocation
+   entirely for short strings. *(See `docs/dev/stdlib_optimizations.md`.)*
+
+8. **Copy-on-write for immutable strings.** Immutable `str` values
+   can share backing buffers on move, deferring allocation until
+   mutation. *(See `docs/dev/stdlib_optimizations.md`.)*
+
+#### When to accept a clone
+
+For small values (short strings, small lists), a clone is often
+cheaper than the cognitive overhead of avoiding it. For values below
+a few hundred bytes, prefer clarity over optimization. Profile
+before restructuring.
+
+#### What Ryo rejects
+
+- **Out-parameters.** Some languages (C, Zig) pass destinations
+  explicitly so callees write into caller-owned memory. Ryo rejects
+  this: NRVO (technique 1) delivers the same performance without
+  the syntactic noise.
+- **Lifetime-annotated return references.** The whole point of
+  Ownership Lite is to not have these. For shared access, use
+  `shared[T]`; for in-place mutation, use `&mut`.
+
+*(Rationale: Ownership Lite's cost story is not "every return is a
+clone" — it is "every return is free unless you built something that
+genuinely needs to be independently owned." Most code falls into
+the free path. For the remainder, the techniques above cover every
+pattern Rust handles with lifetime-annotated borrows, without
+reintroducing lifetimes.)*
+
 ## 6. Functions & Closures
 
 ### 6.1 Functions & Methods
