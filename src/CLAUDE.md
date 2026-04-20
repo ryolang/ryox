@@ -1,139 +1,92 @@
-## Code quality
+# Ryo Compiler Developer Guide
 
-Always run `cargo fmt` when modify a .rs file.
-Always run `cargo clippy` when modify a .rs file.
+This guide is for agents extending the Ryo compiler. For language design, see `/docs/CLAUDE.md`.
 
-## Follow Rust Pragmatic Rules
+## Code Quality
 
-https://microsoft.github.io/rust-guidelines/agents/all.txt
-
-## Architecture & Code Organization
-
-Apply the CRISP and SOLID patterns.
-
-**Compilation pipeline**:
-```
-Source → Lexer → Indent Preprocessor → Parser → Lower (HIR) → Codegen → Object File → Linker → Executable
+Always run before committing:
+```bash
+cargo fmt && cargo clippy
 ```
 
-**Source modules** (in `src/`):
-- `main.rs` — CLI definition and command dispatch
-- `lexer.rs` — Logos-based tokenizer
-- `indent.rs` — CPython-style Indent/Dedent token insertion
-- `parser.rs` — Chumsky-based parser producing AST
-- `ast.rs` — AST node definitions
-- `lower.rs` — AST → HIR lowering with scope resolution and type checking
-- `hir.rs` — High-level IR data structures (post-analysis, fully typed)
-- `builtins.rs` — Builtin function registry (print, future builtins)
-- `codegen.rs` — Cranelift IR generation from HIR
-- `errors.rs` — CompilerError type
-- `linker.rs` — Executable linking via managed Zig toolchain
-- `toolchain.rs` — Zig toolchain management (download, version pinning, path resolution)
-- `pipeline.rs` — Pipeline orchestration (lex, parse, lower, compile, run)
-
-## Testing Strategy
-
-### Test File Locations
+## Compilation Pipeline
 
 ```
-tests/
-└── integration_tests.rs    # Integration tests
-
-src/
-├── parser.rs               # Parser unit tests (mod tests)
-└── ...                     # Other unit tests inline
+Source → Lexer → Indent Preprocessor → Parser → Lower (HIR) → Codegen → Linker → Executable
 ```
 
-### Integration Tests
+## Adding a New Language Feature
 
-Located in `tests/integration_tests.rs`, these tests verify:
-- End-to-end compilation and execution
-- Filename-based output generation
-- Error handling (parse errors, file not found)
-- Lex command functionality
-- Complex expression compilation
+Follow this sequence:
 
-Tests MUST use temporary directories and automatic cleanup via RAII patterns.
+### 1. Add Token (lexer.rs)
+Use Logos attributes on the `Token` enum:
+```rust
+#[token("keyword")]  // Exact match
+Keyword,
+#[regex(r"[0-9]+")]  // Regex match
+Number(&'a str),
+```
 
-### Running Tests
+### 2. Add AST Node (ast.rs)
+- Add variant to `StmtKind` or `ExprKind`
+- Define a struct if complex (like `VarDecl`, `FunctionDef`)
+- Include `span: SimpleSpan` for error reporting
+- All nodes use `SimpleSpan` from Chumsky
+
+### 3. Add Parser Rule (parser.rs)
+Use Chumsky combinators: `just(Token::X)` for exact match, `.then()` for sequence, `.or_not()` for optional, `.repeated()` for repetition, `.map_with()` to capture span.
+```rust
+let my_feature = just(Token::Keyword).ignore_then(expression_parser())
+    .map_with(|expr, e| Statement { span: e.span(), kind: StmtKind::MyFeature(expr) });
+```
+
+### 4. Add HIR Node (hir.rs)
+HIR is fully typed — add variant to `HirStmt` or `HirExprKind`. All expressions have `.ty: Type` field.
+
+### 5. Add Lowering Case (lower.rs)
+In `lower_stmt()` or `lower_expr()`, resolve types and use scope for lookups. Type errors return `Err(String)`.
+```rust
+ast::StmtKind::MyFeature(expr) => {
+    let hir_expr = lower_expr(expr, scope, signatures)?;
+    out.push(HirStmt::MyFeature(hir_expr, stmt.span));
+}
+```
+
+### 6. Add Codegen (codegen.rs)
+Emit Cranelift IR in `compile_stmt()` or `compile_expr()`. Common patterns: `builder.ins().iconst()` for constants, `.iadd()` for add, `.call()` for calls. Store locals as `Variable` in `locals` HashMap.
+```rust
+HirStmt::MyFeature(expr, _) => {
+    let val = self.compile_expr(expr, builder, fctx)?;
+    builder.ins().iconst(self.int_type, val);
+}
+```
+
+### 7. Add Test
+Add to `tests/integration_tests.rs` or inline `mod tests`.
+
+## Error Handling
+
+`CompilerError` enum propagates errors: `IoError`, `ParseError`, `LowerError`, `CodegenError`, `LinkError`, `ToolchainError`. Convert with `.map_err(CompilerError::ParseError)`.
+
+## Testing
 
 ```bash
-# All tests
-cargo test
-
-# Specific test
-cargo test test_addition
-
-# With output
-cargo test -- --nocapture
-
-# Integration tests only
-cargo test --test integration_tests
+cargo test                      # All tests
+cargo test test_name            # Specific test
+cargo test -- --nocapture       # Show output
 ```
 
-## GNU Binutils for Linux
-```shell
-objdump -d output.o
-objdump -h output.o
-objdump -x output.o
+## Binary Inspection
+
+Verify codegen output (macOS/Linux):
+```bash
+objdump -d output.o  # disassembly
+nm output.o          # symbols
 ```
-
-## macOS
-```shell
-otool -tV output.o
-otool -h output.o
-otool -l output.o
-```
-
-```shell
-nm output.o
-```
-
-```shell
-xxd output.o | less
-hexdump -C output.o | less
-```
-
----
-
-## Troubleshooting
-
-### Common Build Issues
-
-**Issue**: `Toolchain error: Zig binary not found`
-- **Solution**: Install the managed Zig toolchain
-  ```bash
-  ryo toolchain install
-  ryo toolchain status   # verify installation
-  ```
-
-**Issue**: Cranelift version mismatch
-- **Solution**: Update all Cranelift dependencies together
-  ```bash
-  cargo update -p cranelift -p cranelift-jit -p cranelift-module -p cranelift-object
-  ```
-
-### Runtime Issues
-
-**Issue**: Generated executable crashes
-- **Debug**: Check object file with `objdump` or `otool`
-- **Check**: Managed Zig installation (`ryo toolchain status`)
-- **Verify**: Target triple matches host architecture
-
-**Issue**: Parse errors not helpful
-- **Solution**: Use `ryo lex <file>` to check tokens first
-- **Debug**: Add debug prints in parser (temporarily)
-
----
 
 ## Related Documentation
 
-**Developer documentation:**
-- `docs/dev/README.md` - Developer docs index
-- `docs/dev/implementation_roadmap.md` - Development milestones and current status
-- `docs/dev/project_structure.md` - Codebase architecture
-- `docs/dev/compilation_pipeline.md` - Compilation details
-- `docs/dev/token.rs.md` - Lexer implementation, to be deleted once implemented in source code
-- `docs/dev/parser.rs.md` - Parser implementation, to be deleted once implemented in source code
-
----
+- `docs/dev/compilation_pipeline.md` — detailed pipeline documentation
+- `docs/dev/implementation_roadmap.md` — feature roadmap
+- `docs/CLAUDE.md` — language design and syntax rules
