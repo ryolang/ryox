@@ -198,7 +198,7 @@ Ryo assumes a workflow where AI agents write code and human developers review, d
 *   **Encoding:** Source files are UTF-8 encoded, allowing for Unicode characters in strings and potentially identifiers (if identifier rules are expanded later).
 *   **Identifiers:** `[a-zA-Z_][a-zA-Z0-9_]*`. Case-sensitive.
     *   *Convention:* Follow `snake_case` for variables, functions, and modules. Use `PascalCase` for user-defined types (structs, enums, traits) and enum variants. Built-in fundamental types (primitives and collections) use lowercase (e.g., `int`, `str`, `list`, `map`). *(Rationale: Adopting common conventions enhances readability and aligns with practices in Python and Rust).*
-*   **Keywords:** `fn`, `struct`, `enum`, `trait`, `impl`, `mut`, `if`, `elif`, `else`, `for`, `in`, `return`, `break`, `continue`, `import`, `match`, `pub`, `package`, `true`, `false`, `none`, `void`, `move`, `error`, `try`, `catch`, `orelse`, `select`, `case`, `default`. (Note: `comptime`, `unsafe` are planned for future implementation. `void` is reserved for the unit type. `as` and `let` are not keywords. `package` is an access modifier keyword added for package-internal visibility. `select`, `case`, and `default` are used for non-deterministic concurrent operations).
+*   **Keywords:** `fn`, `struct`, `enum`, `trait`, `impl`, `mut`, `if`, `elif`, `else`, `for`, `while`, `in`, `return`, `break`, `continue`, `import`, `match`, `pub`, `package`, `true`, `false`, `none`, `void`, `move`, `error`, `try`, `catch`, `orelse`, `select`, `case`, `default`. (Note: `comptime`, `unsafe` are planned for future implementation. `void` is reserved for the unit type. `as` and `let` are not keywords. `package` is an access modifier keyword added for package-internal visibility. `select`, `case`, and `default` are used for non-deterministic concurrent operations).
 *   **Operators:** Standard set including arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), logical (`and`, `or`, `not`), assignment (`=`), type annotation (`:`), scope/literal delimiters (`{`, `}`, `[`, `]`, `(` `)`), access (`.`), error union prefix (`!`), optional chaining (`?.`), range bounds (`..`, used in constrained types `int(1..65535)` — not used for iteration or slicing), slice (`:` inside `[]`, e.g., `s[1:4]`, `s[:4]`, `s[2:]` — Python/Go convention).
     *   **Important Note:** The `!` operator is used exclusively for error union type prefixes (`!T` = error or T, `ErrorType!T` = ErrorType or T). The `!` is NOT used for logical negation—use `not` instead (following Python convention). Similarly, `?` operator in type context (`?T`) denotes optional types, while `?.` is the optional chaining operator.
     *   `_` (Underscore): The underscore `_` is treated as a special identifier. When used in patterns (`match`, destructuring assignment), it signifies a wildcard or an intentionally ignored value; it does not bind to a variable.
@@ -282,11 +282,11 @@ Ryo assumes a workflow where AI agents write code and human developers review, d
 		fn reset(&mut self): self.count = 0
 	```
 *   **Method Call:** `instance.method(args...)`. Field Access: `instance.field`.
-*   **Control Flow:** `if/elif/else`, three `for` loop forms:
+*   **Control Flow:** `if/elif/else`, two `for` loop forms and `while`:
     *   **Iteration:** `for item in iterable:` — iterate over collections
     *   **Counted:** `for i in range(start, end):` — counted iteration (exclusive end)
-    *   **Condition:** `for condition:` — repeat while condition is true (Ryo's replacement for `while`)
-    *   Ryo has no `while` keyword — `for condition:` serves this role. One keyword, fewer concepts.
+    *   **Condition:** `while condition:` — repeat while condition is true
+    *   **Infinite:** `while true:` — infinite loop (use `break` to exit)
 *   **Loop Semantics:**
     *   **Loop Variable Scope:** Loop variables are **block-scoped** — they exist only inside the loop body and are not accessible after the loop ends.
         ```ryo
@@ -294,14 +294,14 @@ Ryo assumes a workflow where AI agents write code and human developers review, d
 		    print(i)      # ok
 		# print(i)        # compile error: `i` not in scope
 		```
-    *   **Loop Variable Mutability:** Loop variables are **immutable** (consistent with Ryo's default). In iteration loops, the variable is re-bound each iteration. For condition-based loops, use a separately declared `mut` variable.
+    *   **Loop Variable Mutability:** Loop variables are **immutable** (consistent with Ryo's default). In iteration loops, the variable is re-bound each iteration. For `while` loops, use a separately declared `mut` variable.
         ```ryo
 		for item in items:
 		    # item is immutable — cannot assign to item
 		    print(item)
 
 		mut counter = 0
-		for counter < 10:
+		while counter < 10:
 		    print(counter)
 		    counter += 1    # counter is mut, declared outside the loop
 		```
@@ -319,7 +319,7 @@ Ryo assumes a workflow where AI agents write code and human developers review, d
 		```
         **Note:** The `..` operator is reserved for type bounds (`int(1..65535)`). Slicing uses `:` inside `[]` (`s[1:4]`). Iteration uses `range()`. Each operator has exactly one meaning.
     *   **`break`/`continue`:** Affect the **innermost** enclosing loop. Using `break` or `continue` outside a loop is a compile error. Labeled breaks are not supported in v0.1. Loops are statements, not expressions — `break` does not carry a value.
-    *   *(Rationale: Block-scoped loop variables prevent accidental use of stale state. Immutable loop variables are consistent with Ryo's default and eliminate a class of bugs. `range()` is the single mechanism for counted iteration — no operator alternative, no ambiguity. It follows Python conventions because that's the target audience. Each operator has exactly one purpose: `range()` for iteration, `:` for slicing, `..` for type bounds. One loop keyword (`for`) with three forms keeps the language simple — `while` is redundant when `for condition:` exists.)*
+    *   *(Rationale: Block-scoped loop variables prevent accidental use of stale state. Immutable loop variables are consistent with Ryo's default and eliminate a class of bugs. `range()` is the single mechanism for counted iteration — no operator alternative, no ambiguity. It follows Python conventions because that's the target audience. Each operator has exactly one purpose: `range()` for iteration, `:` for slicing, `..` for type bounds. `for` handles iteration and counting; `while` handles conditions. Each keyword has one clear purpose. `while true:` replaces a dedicated `loop` keyword — one keyword per concept, no more.)*
 
 *   **Pattern Matching:** `match expr: Pattern1: ... Pattern2(bind): ... Pattern3 { x, y }: ... _ : ...` (`_` for wildcard/default).
 
