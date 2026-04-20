@@ -12,29 +12,13 @@ Files in docs/dev/ are implementation notes, architectural decisions, and design
 
 ---
 
-## Three-Layer Architecture
-
-**Spec says what, dev docs say how, roadmap says when and owns the pointers.**
-
-```
-specification.md          (what the language does)
-         ↑
-         │ "implements Section X.Y"
-         │
-implementation_roadmap.md (when each what gets built — owns pointers to dev docs)
-         ↓
-docs/dev/*.md             (how the compiler/stdlib delivers — links back to spec sections)
-```
-
----
-
-## L-E: Dev-Side Spec Purity
+## Spec vs Dev Doc
 
 **Test:** "Does this sentence belong in the spec or here?"
 - Observable language behavior regardless of implementation → spec
 - Compiler internals, algorithms, data structures, Rust code patterns → dev doc
 
-The spec contains zero implementation detail. Your dev doc is the canonical place for how the compiler delivers the spec's promises.
+The spec contains zero implementation detail. Your dev doc is the canonical place for how the compiler delivers the spec's promises. See docs/CLAUDE.md for the full three-layer architecture diagram.
 
 ---
 
@@ -54,13 +38,13 @@ The spec doesn't know about you; you know about it.
 
 ---
 
-## L-F: Roadmap Owns Pointers
+## Roadmap Owns Pointers
 
 Dev docs are referenced FROM the roadmap, not FROM the spec. When writing a new dev doc, add a roadmap entry pointing to it.
 
 ---
 
-## L-L: Milestone Dependencies
+## Milestone Dependencies
 
 Known sequencing constraints:
 - M20 (`&mut`) MUST precede M22 (collections) and M23 (Drop)
