@@ -1284,7 +1284,7 @@ The Ryo Ownership Model is a four-layered system:
 └─────────────────────────────────────────────────────┘
 ```
 
-**The trade-off, stated honestly:** Ryo trades zero-copy flexibility for zero-annotation simplicity. Code that Rust would express as a returned `&str` slice, Ryo expresses as a cloned `str`. The compiler applies copy elision where it can. For web backends, CLI tools, and scripts, this cost is negligible. For performance-critical inner loops, `unsafe` blocks (restricted to system packages) provide an escape hatch to raw pointers.
+**The trade-off, stated honestly:** Ryo trades zero-copy flexibility for zero-annotation simplicity. Code that Rust would express as a returned `&str` slice, Ryo expresses as a cloned `str`. The compiler applies copy elision where it can. For shared-state scenarios, Ryo's `shared[mutex[T]]` is comparable in ceremony to Rust's `Arc<Mutex<T>>` — neither language makes concurrent mutation invisible. For web backends, CLI tools, and scripts, these costs are negligible. For performance-critical inner loops, `unsafe` blocks (restricted to system packages) provide an escape hatch to raw pointers.
 
 All four layers work together to deliver Ryo's promise: **memory safety that feels like Python.**
 
