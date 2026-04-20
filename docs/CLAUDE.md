@@ -149,6 +149,48 @@ fn main():
 
 ---
 
+## Documentation Conventions
+
+**Three-layer doc split:** Spec says *what*, dev docs say *how*, roadmap says *when* and owns the pointers between layers.
+
+```
+specification.md          (what the language does)
+         ↑
+         │ "implements Section X.Y"
+         │
+implementation_roadmap.md (when each what gets built — owns pointers to dev docs)
+         ↓
+docs/dev/*.md             (how the compiler/stdlib delivers — links back to spec sections)
+```
+
+**Spec purity:** specification.md contains no implementation details and no path references to docs/dev/ files. Test: "Could this sentence remain true regardless of how the compiler implements it?" If yes → spec. If no → dev doc.
+
+**Roadmap owns pointers:** When a new dev doc is written, link it from the roadmap, not from the spec.
+
+**Spec is source of truth:** When index.md, language_comparison.md, or quickstart.md contradict the spec, update the companion, never the spec.
+
+**Preserve voice; minimal diffs:** Restructuring sections is out of scope. Preserve existing voice and structure. For multi-file changes, show diffs before applying.
+
+**Audit first:** For multi-file documentation changes, grep the tree first and produce an audit.
+
+**Scratch vs committed:** Working artifacts go in docs/analysis/ and are not committed.
+
+---
+
+## Gotchas
+
+**Task closures move implicitly.** In Section 9, closures passed to `task.run`/`task.scope`/`task.spawn_detached` capture by move automatically. Writing `move` on them is accepted but redundant. Elsewhere, `move` is always explicit.
+
+**`&mut` and `move` are the same cost.** Under NRVO, both compile to a pointer pass. See Section 5.2.1.
+
+**Section 5.1 and Rule 2 are both correct.** Section 5.1's "moved by default" applies to assignment and return. Rule 2 says parameters default to immutable borrow. These cover different cases. Do not "fix" the apparent contradiction.
+
+**Spec sections never link to `docs/dev/` files by path.** If you're about to write "see `docs/dev/X.md`" in the spec, stop — the reference belongs in the roadmap.
+
+**Roadmap milestone dependencies are real.** M20 (`&mut`) must precede M22 (collections) and M23 (Drop). Closure capture analysis must follow M15. Reorderings that ignore these recreate known paradoxes.
+
+---
+
 ## Related Documentation
 
 **For complete syntax:**
@@ -156,5 +198,3 @@ fn main():
 
 **For implementation status:**
 - See `docs/implementation_roadmap.md`
-
----
