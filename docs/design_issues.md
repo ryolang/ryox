@@ -21,7 +21,7 @@ These require resolution before implementation reaches the affected milestone.
 
 ### 3. Error Handling Overhead
 
-*   **The Smell:** The spec claims "Competitive Performance" but admits a "~5-10% overhead" for mandatory stack trace capture on errors.
+*   **The Smell:** The spec claims "Native Performance" but admits a "~5-10% overhead" for mandatory stack trace capture on errors.
 *   **The Reality:** Capturing stack traces is extremely expensive in high-throughput systems (10x-100x slower than the operation itself).
 *   **Proposal: Lazy Symbol Resolution + PC Capture**
     1.  **At Runtime (Fast):** Capture *only* the Program Counter and Stack Pointer (copying a few integers — nanoseconds).
