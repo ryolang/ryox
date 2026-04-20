@@ -1,143 +1,78 @@
-# Ryo Programming Language - Project Context
+# Ryo Programming Language - Repository Conventions
 
-**Ryo** is an early-stage (pre-alpha) statically-typed, compiled aot/jit programming language that draws inspiration from several modern programming languages, taking the best ideas from each:
+**Ryo** is a pre-alpha statically-typed, compiled (AOT/JIT) programming language implemented in Rust. See README.md for language philosophy and design goals.
 
-### 🐍 Python - Syntax & Developer Experience
-- **Clean, readable syntax** with colons and indentation, IMPORTANT!
-- **Type inference** for reduced boilerplate
-- **F-strings** for intuitive string formatting
-- **Tab-based indentation** (enforced at compile-time)
+## Tech Stack & Layout
 
-**Rationale**: Python's syntax makes code accessible to developers of all skill levels. By adopting its readability, Ryo lowers the barrier to entry while maintaining compile-time safety.
-
-### 🦀 Rust - Ownership & Type Safety
-- **Ownership model** for memory safety without garbage collection
-- **Algebraic data types** (enums with associated data)
-- **Pattern matching** with exhaustive checks
-- **Trait system** for polymorphism
-
-**Rationale**: Rust's ownership system eliminates entire classes of bugs (use-after-free, data races) while maintaining performance. Ryo simplifies this concept with "Ownership Lite" - removing lifetime annotations while keeping the core safety guarantees.
-
-### 🔥 Mojo - Ownership Simplified
-- **Ownership without lifetimes** - simpler mental model
-- **Value semantics** with clear ownership transfer
-- **Progressive complexity** - start simple, add complexity when needed
-
-**Rationale**: Mojo demonstrates that ownership doesn't require Rust's complexity. Ryo follows this philosophy, making memory safety accessible to Python developers.
-
-### 🔷 Go - Simplicity-Inspired & Concurrency
-- **Simplicity as inspiration** - fewer language features, done well. Simpler than Rust, more expressive than Go
-- **Fast compilation** times for rapid development
-- **Built-in concurrency primitives** future: CSP-style channels with a twist
-- **Single, standard toolchain** no build configuration hell
-- **Pragmatic approach** to language design
-
-**Rationale**: Go proves that simplicity and performance aren't mutually exclusive. Ryo adopts this pragmatic philosophy while adding modern type safety. Ryo is not as minimal as Go — it adds ownership, generics, and ADTs — but targets the same "few features, done well" ethos.
-
-### ⚡ Zig - Error Handling, Compile-Time & Predictability
-- **Readable by default** - implicit where ceremony hurts clarity (parameter borrowing, type narrowing), explicit where the reviewer needs to see intent (`shared[mutex[T]]`, `try`, `move`)
-- **Comptime execution** for zero-cost abstractions without macros
-- **Simple error handling** with explicit error sets, IMPORTANT!
-- **No operator overloading** - predictable code behavior
-- **No exceptions** - errors are values, not hidden control flow
-- **Minimal runtime** requirements
-
-**Rationale**: Zig's `comptime` provides powerful metaprogramming without complex macro systems. Ryo adopts its error-handling philosophy and predictability while prioritizing DX — removing ceremony that adds noise without aiding comprehension.
-
-**Design Philosophy:**
-1. **Simplicity** - Fewer language features, done well
-2. **Ownership Lite** - Simplified memory management without manual lifetimes
-3. **Python-Inspired Syntax** - Colons and indentation instead of braces
-4. **Compile-Time Safety** - Static typing with inference, exhaustive pattern matching
-5. **No Garbage Collection** - Predictable performance through ownership
-6. **Built in Concurrency** - Task/Future/Channel runtime for I/O-bound work
-7. **AI-Era Design** - Optimized for the AI-writes, human-reviews workflow
-
-**AI-Era Language Design:** As of 2026, most code is written by AI agents and reviewed by humans. Ryo optimizes for this: strict rules and verbose safety patterns (the AI handles ceremony), explicit naming and predictable semantics (the human benefits from clarity). Compiler strictness catches errors before production. Python-style syntax and readable error messages serve the human side of the workflow.
-
-**Target Audience:** Python developers who need better performance, memory safety, and static type checking with an easier learning curve than Rust.
+**Stack:** Rust compiler with Cranelift backend, Zig linker, Logos lexer, Chumsky parser.
+**Layout:** `src/` (compiler), `docs/` (spec, roadmap, examples), `experimental/` (design work), `.github/` (CI).
 
 ---
 
 ## File Naming Conventions
 
-### Ryo Source Files
-- Use lowercase with underscores: `error_handling.ryo`, `hello_world.ryo`
-- Example files: `docs/examples/temperature_converter.ryo`
-
-### Documentation Files
-- Use lowercase with underscores: `getting_started.md`, `design_issues.md`
-- Special files use uppercase: `README.md`, `CLAUDE.md`, `TODO.md`
-
-### Rust Source Files
-- Use lowercase with underscores: `main.rs`, `ast.rs`, `codegen.rs`
-- Follow Rust conventions
+- **Ryo files:** lowercase with underscores (`error_handling.ryo`, `hello_world.ryo`)
+- **Docs:** lowercase with underscores (`getting_started.md`). Special files uppercase (`README.md`, `CLAUDE.md`, `TODO.md`)
+- **Rust files:** lowercase with underscores (`main.rs`, `ast.rs`) following Rust conventions
 
 ---
 
 ## Critical Syntax Rules
 
-### ⚠️ CRITICAL: Python-Style Syntax is MANDATORY
+**⚠️ CRITICAL: Python-Style Syntax is MANDATORY**
 
-All Ryo code examples **must** use Python-style colons and indentation, **NOT** curly braces.
+All Ryo code examples **must** use Python-style colons and indentation, **NOT** curly braces. Braces are ONLY for f-strings.
 
-### No Braces for Code Blocks
-
-### Braces Are Only for F-Strings
-
-### Tab Indentation
-
-- **Use TABS** (not spaces)
-- Mixing tabs and spaces is a **compile-time error**
-- One tab = one indentation level
+**Tab Indentation:** Use TABS (not spaces). Mixing tabs/spaces is a compile-time error. One tab = one indentation level.
 
 ---
 
 ## Documentation Standards
 
-### Code Examples
-
-Always use fenced code blocks with language tag:
-
-````markdown
-```ryo
-fn main():
-    print("Hello, World!")
-```
-````
-
-### Cross-References
-
-Use relative paths for internal links:
-```markdown
-See [specification](docs/specification.md) for details.
-See [examples](docs/examples/README.md) for code samples.
-```
+**Code examples:** Use fenced code blocks with language tag (````ryo`).
+**Cross-references:** Use relative paths (`[spec](docs/specification.md)`).
 
 ---
 
-## Quick Command Reference
+## Build & Test Commands
 
-### Build & Run
 ```bash
-cargo check                  # Check local pkg for errors
-cargo build                  # Build debug
-cargo build --release        # Build release
-cargo run -- run <file>      # Compile and execute (JIT)
-cargo run -- build <file>    # Compile to standalone binary (AOT)
-cargo test                   # Run tests
+cargo check                      # Check for errors
+cargo build [--release]          # Build debug or release
+cargo run -- run <file>          # JIT compile and execute
+cargo run -- build <file>        # AOT compile to binary
+cargo test                       # Run tests
+cargo run -- toolchain install   # Download Zig linker
+cargo run -- toolchain status    # Check Zig status
 ```
 
-### Toolchain Management
-```bash
-cargo run -- toolchain install   # Download managed Zig linker
-cargo run -- toolchain status    # Show Zig installation status
-```
+**File extensions:** `.ryo` (source), `.md` (docs), `.rs` (Rust), `.o`/`.obj` (generated)
 
-### File Extensions
-- `.ryo` - Ryo source files
-- `.md` - Markdown documentation
-- `.rs` - Rust source files
-- `.o` / `.obj` - Object files (generated)
+---
+
+## Development Workflow
+
+**Branch naming:** `feat/`, `docs/`, `fix/`, `chore/`, `design/` prefixes.
+
+**Commit prefixes:** `feat:`, `fix:`, `docs:`, `spec:`, `dev:`, `roadmap:`, `test:`, `chore:`, `refactor:`.
+Keep subjects under 72 chars. Add body for non-obvious changes.
+
+---
+
+## Design Change Escalation
+
+Ryo is pre-alpha. Design changes to the language specification require explicit human approval. Coherence fixes (resolving contradictions, filling documented gaps, tightening phrasing) can proceed as normal work, but anything that adds, removes, or alters a language feature stops for review.
+
+Examples:
+- **OK without approval:** Fixing contradictions between spec sections, clarifying ambiguous phrasing, adding missing details for documented features
+- **Requires approval:** Adding new syntax, removing features, changing semantics, altering ownership rules, modifying error handling behavior
+
+When in doubt, ask before making language design changes.
+
+---
+
+## Documentation Conventions
+
+For docs-specific conventions when editing files in `docs/`, see `docs/CLAUDE.md`.
 
 ---
