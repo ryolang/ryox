@@ -2511,6 +2511,47 @@ ContractViolation: precondition failed: amount > 0
 
 **Hardest Part:** Handling `#[post]` with multiple return points — each `return` must be rewritten to check the postcondition before returning. This is a well-understood AST transformation but requires care.
 
+### Copy Elision & Return Value Optimization
+**Goal:** Implement guaranteed copy elision (NRVO) for return values and move parameters
+
+**Why Post-v0.1.0:**
+- v0.1.0 can use naive copies for returns — correctness first, optimization second
+- Requires mature ownership system (Milestones 15-23) to know what's safe to elide
+- NRVO is an optimization pass, not a semantic feature — adding it later doesn't break existing code
+
+**Features:**
+- Guaranteed elision (G1-G4): local returns, literal construction, last-use moves, tail chains
+- Permitted elision (P1-P4): branch returns, match arms, loop exits, struct field moves
+- Hidden output pointer calling convention for eligible return sites
+- Integration with HIR lowering pipeline
+
+**Implementation Details:** See [copy_elision.md](copy_elision.md) for the full G/P/F classification and algorithm sketch.
+
+**Effort:** ~2-3 weeks
+**Dependencies:** Ownership (M15), Borrows (M19-M20), RAII (M23)
+**Timeline:** v0.2 (early post-v0.1.0)
+
+### Standard Library Allocation Optimizations (SSO, COW)
+**Goal:** Implement small-string optimization and copy-on-write for the `str` type
+
+**Why Post-v0.1.0:**
+- Requires stable `str` type representation (Milestone 15)
+- SSO changes the internal layout — must be decided before ABI stabilization
+- COW requires atomic refcounting infrastructure (shared with `shared[T]`)
+- Performance optimization, not correctness — v0.1.0 works without it
+
+**Features:**
+- Small-string optimization: inline storage for strings ≤23 bytes (zero allocation)
+- Copy-on-write: immutable strings share backing buffers, allocate on mutation
+- Sink-parameter convention: `move T -> T` pattern for buffer-building APIs
+- Atomic COW refcounts for thread safety
+
+**Implementation Details:** See [stdlib_optimizations.md](stdlib_optimizations.md) for SSO threshold, COW semantics, and sink-parameter guidelines.
+
+**Effort:** ~3-4 weeks
+**Dependencies:** String type (M15), Copy elision (above), Concurrency runtime (for atomic refcounts)
+**Timeline:** v0.2-v0.3
+
 ### Cancellation Model (`Canceled`/`Timeout` Errors)
 **Goal:** Define clear cancellation semantics for the concurrency runtime with built-in error types
 

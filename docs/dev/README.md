@@ -23,7 +23,9 @@ This directory contains implementation notes, architectural decisions, and desig
 | [std.md](std.md) | Rust runtime + Ryo wrapper strategy for stdlib (`std.sys` hidden layer + `std.io` public API) | **Move to spec** §13 (Standard Library) — then delete |
 | [std_ext.md](std_ext.md) | Curated Rust crates to wrap for stdlib (serde_json, ureq, regex, chrono, rand) | **Move to spec** §13 or a dedicated stdlib contributor guide — then delete |
 | [unsafe.md](unsafe.md) | `kind = "system"` gatekeeper pattern for unsafe blocks in `ryo.toml` | **Move to spec** §17 (FFI & unsafe) — then delete |
+| [copy_elision.md](copy_elision.md) | Copy elision rules: guaranteed (G1-G4), permitted (P1-P4), forbidden cases, algorithm sketch | **Implement** in compiler v0.2+ — then keep as reference |
 | [dyn_trait.md](dyn_trait.md) | Enum dispatch workaround for v0.1 (no `dyn Trait` yet), vtable explanation | **Delete** when `dyn Trait` is implemented in v0.3+ |
+| [stdlib_optimizations.md](stdlib_optimizations.md) | SSO, copy-on-write, sink-parameter conventions for `str` and collections | **Implement** in stdlib v0.2+ — then keep as reference |
 
 ### Ecosystem & Tooling
 

@@ -968,12 +968,12 @@ Ryo's memory model is designed for one goal: **Rust-level safety without lifetim
 
 *   **No Garbage Collector.** Deterministic performance and resource management.
 *   **No Lifetime Annotations.** Borrows are scoped to function calls — the compiler always knows when they end.
-*   **Clone When Needed.** Returning owned values costs an allocation; the compiler can elide copies when it proves safety. For Ryo's target domains (web backends, CLI tools, scripts), this trade-off is invisible in practice.
+*   **Clone Only When Necessary.** Returning owned values uses NRVO — the compiler writes directly into the caller's slot. Moving owned values transfers a fat pointer, not the underlying data. Actual copies are rare, reserved for cases where the compiler cannot prove safety or the caller demands an independent value. See Section 5.9 for idiomatic copy-avoidance techniques.
 
 ### 5.1 Value Semantics (Copy) vs. Ownership Semantics (Move)
 
 *   **Value Types (Copy):** Primitive types (`int`, `float`, `bool`, `char`) and small, user-defined structs (that contain only Copy types) are **copied** on assignment, function call, and return. Ownership is trivial.
-*   **Ownership Types (Move):** Types that manage external resources (e.g., `str`, `list[T]`, `map[K, V]`, and most user-defined structs/enums) are **moved** by default.
+*   **Ownership Types (Move):** Types that manage external resources (e.g., `str`, `list[T]`, `map[K, V]`, and most user-defined structs/enums) are **moved** on assignment and return. Function parameters are a separate case — they default to immutable borrow (see Rule 2); `move` is the explicit opt-in when the function needs to take ownership.
 
 ### 5.2 The Three Modes of Data Access
 
@@ -984,6 +984,115 @@ Ryo defines three explicit ways to pass data into functions. These are **paramet
 | **Immutable Borrow** | `data: Type` (implicit) | Read-only access. The default for all parameters. | **Valid** — unchanged |
 | **Mutable Borrow** | `data: &mut Type` (in signature) + `&mut x` (at call site) | Exclusive mutable access. No other borrows allowed simultaneously. | **Valid** — may be modified |
 | **Move** | `move data: Type` (in signature) | Transfers ownership. The function now owns the value. | **Invalidated** — use-after-move is a compile error |
+
+#### 5.2.1 Choosing Between Parameter Modes
+
+Section 5.2's table lists three parameter modes: immutable borrow
+(default), `&mut` (mutable borrow), and `move` (ownership transfer).
+The decision rule is not "do I want to mutate?" — both `&mut` and
+`move` can mutate. The question is: **does ownership of this value
+need to leave the caller?**
+
+| Need | Use |
+|------|-----|
+| Read-only access | Default borrow (no annotation) |
+| Modify in place, caller keeps the value | `&mut` |
+| Take ownership permanently | `move` |
+| Take ownership temporarily and return it | `move T -> T` |
+
+##### Use `&mut` when:
+
+- The function modifies data and the caller keeps the binding
+- Most mutation APIs (`buf.push_str`, `list.sort`, `map.insert`)
+- The value stays in the same storage for the caller's entire scope
+
+Example:
+```ryo
+fn add_header(buf: &mut str, header: str):
+	buf.push_str(header)
+	buf.push('\n')
+```
+
+##### Use `move` when ownership must leave the caller:
+
+1. **Storage in another scope.** Inserting into a collection, storing
+   in a struct field, sending across a channel, spawning into a task.
+   The value outlives the call; `&mut` cannot express this because
+   a borrow ends when the function returns.
+
+   ```ryo
+   fn store(move item: Item):
+   	self.items.append(move item)
+   ```
+
+2. **Type transformation.** Consuming one type to produce another.
+   `&mut` cannot do this because the caller's binding has a fixed
+   type — you cannot mutate a `list[u8]` into a `str`.
+
+   ```ryo
+   fn into_string(move bytes: list[u8]) -> str: ...
+   ```
+
+3. **Conditional ownership return.** Take ownership, return it to the
+   caller on failure, keep it on success. `&mut` is always valid
+   after the call, so there is no way to express "I took it unless
+   I gave it back."
+
+   ```ryo
+   fn try_insert(move item: Item) -> Item!void: ...
+   ```
+
+4. **Sink parameters for incremental building.** When a caller wants
+   to thread a buffer through multiple build steps without exposing
+   mutability to each step:
+
+   ```ryo
+   fn append_header(move buf: str, name: str, value: str) -> str:
+   	buf.push_str(name)
+   	buf.push_str(": ")
+   	buf.push_str(value)
+   	buf.push('\n')
+   	return buf
+   ```
+
+   For method chaining on builder types, `move self -> Self` is the
+   idiomatic form:
+
+   ```ryo
+   result = Request.new()
+   	.header("Host", "example.com")
+   	.header("Accept", "*/*")
+   	.send()
+   ```
+
+##### Performance note
+
+Under Ryo's copy elision rules (see Section 5.9), `&mut` and `move`
+compile to identical cost. Both pass a pointer; neither copies the
+underlying data. The choice is about ownership semantics and
+call-site readability, not performance.
+
+##### Concurrency constraint
+
+Values that cross task boundaries cannot be `&mut` borrowed —
+borrows do not survive across tasks (Rule 5). The choice for data
+crossing concurrent code is between `move` (task owns the value) and
+`shared[T]` (multiple tasks share access). `&mut` is not an option.
+
+##### Interaction with Drop
+
+`&mut` leaves Drop timing with the caller — the value is dropped
+when the caller's scope ends. `move` hands Drop responsibility to
+the callee — the value is dropped when the callee's scope ends, or
+earlier if the callee passes ownership elsewhere. For resource types
+(files, connections, locks), prefer `&mut` for operations and `move`
+only when the resource is being consumed.
+
+*(Rationale: The `&mut`/`move` distinction is one of the sharper
+edges in Ryo's design. Making the decision rule explicit — and
+making performance a non-factor in the choice — frees developers to
+choose based on semantics. Most code wants `&mut`; the four cases
+above are when `move` earns its place.)*
 
 ### 5.3 Formalized Rules
 
@@ -1277,9 +1386,104 @@ The Ryo Ownership Model is a four-layered system:
 └─────────────────────────────────────────────────────┘
 ```
 
-**The trade-off, stated honestly:** Ryo trades zero-copy flexibility for zero-annotation simplicity. Code that Rust would express as a returned `&str` slice, Ryo expresses as a cloned `str`. The compiler applies copy elision where it can. For shared-state scenarios, Ryo's `shared[mutex[T]]` is comparable in ceremony to Rust's `Arc<Mutex<T>>` — neither language makes concurrent mutation invisible. For web backends, CLI tools, and scripts, these costs are negligible. For performance-critical inner loops, `unsafe` blocks (restricted to system packages) provide an escape hatch to raw pointers.
+**The trade-off, stated honestly:** Ryo trades lifetime annotations for simplicity. Where Rust would return a borrowed `&str` slice tied to the caller's scope, Ryo returns an owned `str` — but most returns are free thanks to NRVO and move semantics (see Section 5.9). Actual clones are limited to cases where the caller genuinely needs an independent copy. For shared-state scenarios, Ryo's `shared[mutex[T]]` is comparable in ceremony to Rust's `Arc<Mutex<T>>` — neither language makes concurrent mutation invisible. For web backends, CLI tools, and scripts, these costs are negligible. For performance-critical inner loops, `unsafe` blocks (restricted to system packages) provide an escape hatch to raw pointers.
 
 All four layers work together to deliver Ryo's promise: **memory safety that feels like Python.**
+
+### 5.9 Avoiding Unnecessary Copies
+
+Ryo's "clone on return" framing is misleading in practice: several
+language- and library-level techniques combine to make most return
+paths zero-copy or near-zero-copy, without lifetime annotations.
+
+This section is a reference for idiomatic copy-avoidance. When a
+performance-critical code path allocates more than expected, these
+are the tools in order of preference.
+
+#### Guaranteed by the compiler
+
+1. **Return value optimization.** When a function returns a locally
+   constructed owned value, the compiler writes that value directly
+   into the caller's destination slot. No copy, no temporary.
+   *(See `dev/copy_elision.md` for the exact rules.)*
+
+2. **Move semantics cost a pointer move, not a data copy.** Owned
+   types like `str` and `list[T]` are fat pointers (pointer + length
+   + capacity). Moving them between scopes is a register-to-register
+   transfer.
+
+#### Idiomatic techniques
+
+3. **Use `&mut` for in-place mutation.** When a function modifies
+   data rather than producing a new value, take `&mut` instead of
+   consuming and returning. See Section 5.2.1 for the full decision
+   rule between `&mut` and `move`.
+
+   ```ryo
+   fn add_header(buf: &mut str, header: str):
+   	buf.push_str(header)
+   	buf.push('\n')
+   ```
+
+4. **Use move-in / move-out for incremental building.** When the
+   caller wants to hand off a buffer for the callee to fill (the
+   "sink parameter" pattern, documented in Section 5.2.1):
+
+   ```ryo
+   fn append_header(move buf: str, header: str) -> str:
+   	buf.push_str(header)
+   	buf.push('\n')
+   	return buf
+   ```
+
+   The `buf` travels through the callee without being copied.
+
+5. **Use `shared[T]` for read-heavy fanout.** When many holders need
+   read-only access to the same value — configuration, parsed ASTs,
+   loaded assets — `shared[T]` hands out cheap refcounted handles
+   instead of clones. See Section 5.6.
+
+6. **Use scope-locked views for transformation chains.** Chained
+   transformations (`filter → map → collect`) allocate only at the
+   terminal `collect()`. See Section 5.7.
+
+#### Stdlib-level optimizations
+
+These are implementation details of the standard library, not
+language features, but they affect real-world copy behavior:
+
+7. **Small-string optimization.** `str` values below a threshold are
+   stored inline in the fat pointer, eliminating heap allocation
+   entirely for short strings. *(See `dev/stdlib_optimizations.md`.)*
+
+8. **Copy-on-write for immutable strings.** When a copy is required
+   for an immutable `str`, the backing buffer is shared via refcount
+   rather than duplicated, deferring allocation until mutation.
+   *(See `dev/stdlib_optimizations.md`.)*
+
+#### When to accept a clone
+
+For small values (short strings, small lists), a clone is often
+cheaper than the cognitive overhead of avoiding it. For values below
+a few hundred bytes, prefer clarity over optimization. Profile
+before restructuring.
+
+#### What Ryo rejects
+
+- **Out-parameters.** Some languages (C, Zig) pass destinations
+  explicitly so callees write into caller-owned memory. Ryo rejects
+  this: NRVO (technique 1) delivers the same performance without
+  the syntactic noise.
+- **Lifetime-annotated return references.** The whole point of
+  Ownership Lite is to not have these. For shared access, use
+  `shared[T]`; for in-place mutation, use `&mut`.
+
+*(Rationale: Most returns are free — NRVO writes directly into the
+caller's slot, and move semantics transfer a pointer, not data.
+Clones occur only when the caller genuinely needs an independent
+copy of shared data. The techniques above cover every pattern Rust
+handles with lifetime-annotated borrows, without reintroducing
+lifetimes.)*
 
 ## 6. Functions & Closures
 
