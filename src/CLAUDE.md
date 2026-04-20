@@ -56,11 +56,11 @@ ast::StmtKind::MyFeature(expr) => {
 ```
 
 ### 6. Add Codegen (codegen.rs)
-Emit Cranelift IR in `compile_stmt()` or `compile_expr()`. Common patterns: `builder.ins().iconst()` for constants, `.iadd()` for add, `.call()` for calls. Store locals as `Variable` in `locals` HashMap.
+Add a match arm in `compile_function()` where `HirStmt` variants are dispatched. Use `Self::eval_expr()` to evaluate sub-expressions. Common patterns: `builder.ins().iconst()` for constants, `.iadd()` for add, `.call()` for calls. Store locals as `Variable` in `locals` HashMap.
 ```rust
 HirStmt::MyFeature(expr, _) => {
-    let val = self.compile_expr(expr, builder, fctx)?;
-    builder.ins().iconst(self.int_type, val);
+    let val = Self::eval_expr(&mut builder, expr, &mut func_ctx)?;
+    // use val...
 }
 ```
 
@@ -69,7 +69,7 @@ Add to `tests/integration_tests.rs` or inline `mod tests`.
 
 ## Error Handling
 
-`CompilerError` enum propagates errors: `IoError`, `ParseError`, `LowerError`, `CodegenError`, `LinkError`, `ToolchainError`. Convert with `.map_err(CompilerError::ParseError)`.
+`CompilerError` enum propagates errors: `IoError`, `ParseError`, `LowerError`, `CodegenError`, `LinkError`, `ToolchainError`, `ExecutionError`. Convert with `.map_err(CompilerError::ParseError)`.
 
 ## Testing
 

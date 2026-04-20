@@ -185,9 +185,7 @@ docs/dev/*.md             (how the compiler/stdlib delivers — links back to sp
 
 **Section 5.1 and Rule 2 are both correct.** Section 5.1's "moved by default" applies to assignment and return. Rule 2 says parameters default to immutable borrow. These cover different cases. Do not "fix" the apparent contradiction.
 
-**Spec sections never link to `docs/dev/` files by path.** If you're about to write "see `docs/dev/X.md`" in the spec, stop — the reference belongs in the roadmap.
-
-**Roadmap milestone dependencies are real.** M20 (`&mut`) must precede M22 (collections) and M23 (Drop). Closure capture analysis must follow M15. Reorderings that ignore these recreate known paradoxes.
+**Roadmap milestone dependencies are real.** See docs/dev/CLAUDE.md for the specific sequencing constraints.
 
 ---
 

@@ -40,7 +40,7 @@ The spec doesn't know about you; you know about it.
 
 ## Roadmap Owns Pointers
 
-Dev docs are referenced FROM the roadmap, not FROM the spec. When writing a new dev doc, add a roadmap entry pointing to it.
+Dev docs are referenced FROM the roadmap, not FROM the spec (see docs/CLAUDE.md for the full rule). When writing a new dev doc, add a roadmap entry pointing to it.
 
 ---
 
