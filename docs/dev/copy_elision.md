@@ -1,7 +1,7 @@
 # Copy Elision and Return Value Optimization
 
 **Status:** Design (v0.2+). Partial implementation starts at milestone
-[TBD — see roadmap update in companion task].
+Copy Elision & NRVO (Phase 5, v0.2+).
 
 ## Purpose
 Defines the compiler's contract for eliding copies on function return
@@ -127,4 +127,4 @@ substitutes storage locations, not ownership semantics.
 - Spec: Section 5.9 (user-facing guarantees)
 - Spec: Section 5.4 (Drop / RAII)
 - Dev: compilation_pipeline.md
-- Milestone: [TBD — pointer added in roadmap update task]
+- Milestone: Copy Elision & NRVO (Phase 5, v0.2+) — see implementation_roadmap.md

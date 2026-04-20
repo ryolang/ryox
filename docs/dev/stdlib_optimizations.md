@@ -1,7 +1,7 @@
 # Standard Library Allocation Optimizations
 
 **Status:** Design (v0.2+). Drives stdlib implementation starting at
-milestone [TBD].
+milestone Stdlib Allocation Optimizations (Phase 5, v0.2+).
 
 ## Purpose
 Documents the allocation-avoidance optimizations the standard
@@ -102,4 +102,4 @@ Specific function signatures will be finalized during stdlib design.
 ## References
 - Spec: Section 5.9
 - Dev: std.md, std_ext.md, copy_elision.md
-- Milestone: [TBD]
+- Milestone: Stdlib Allocation Optimizations (Phase 5, v0.2+) — see implementation_roadmap.md
