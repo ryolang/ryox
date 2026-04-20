@@ -145,10 +145,10 @@ Ryo explicitly prioritizes **developer experience and debugging capability over 
 
 **Comparison to Other Languages:**
 
-- **Rust:** Optional stack traces (`RUST_BACKTRACE`), no overhead by default. Harder to debug but faster.
-- **Go:** Simple stack traces with lower overhead. Less detailed than Ryo.
-- **Zig:** Minimal runtime, opt-in stack traces. More control, less automation.
-- **Ryo:** Rich debugging by default, configurable. Best DX out-of-box, with escape hatches.
+- **Rust:** Zero-overhead tracing (opt-in via `RUST_BACKTRACE`). Fastest, but harder to debug by default.
+- **Go:** Built-in stack traces with moderate overhead. Simpler than Ryo, but less detailed.
+- **Zig:** Near-zero overhead with opt-in tracing. Maximum control, minimal automation.
+- **Ryo:** Rich debugging by default, trades performance for DX. Better out-of-box experience than Go, more overhead than Rust/Zig.
 
 *Rationale: Most applications spend more engineering time debugging than optimizing. Ryo chooses to save developer time at the cost of runtime performance, making it ideal for the 95% of applications where developer productivity matters more than the last 10% of performance.*
 
