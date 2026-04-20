@@ -1219,6 +1219,8 @@ fn setup_server():
 
 *(Rationale: In Ryo's target domains, `shared[T]` is common in server code — shared DB pools, shared configuration, shared caches. It is not an "escape hatch" to be avoided; it is the idiomatic tool for shared state. The key is that it's explicit: the type signature tells the reviewer "this data is shared.")*
 
+**Cost clarification:** For read-only shared state, `shared[T]` is simpler than Rust's approach — no need for `Arc` wrappers when the data is immutable. However, for mutable shared state, `shared[mutex[T]]` has ceremony parity with Rust's `Arc<Mutex<T>>` — the difference is syntax (lowercase, no angle brackets), not conceptual complexity. The lock/unlock ceremony is identical.
+
 ### 5.7 Iterators and Views
 
 Iterators are the one place where a "borrowed view" must exist beyond a single function call — an iterator borrows from a collection for the duration of a loop. Ryo handles this with **scope-locked views**: views that the compiler guarantees cannot escape their enclosing block.
