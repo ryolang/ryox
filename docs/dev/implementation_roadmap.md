@@ -715,7 +715,7 @@ fn print_if_even(n: int) -> void:  # void return type
 
 fn main() -> int:
 	mut counter = 0
-	for counter < 10:
+	while counter < 10:
 		print_if_even(counter)
 		counter += 1
 	return 0
@@ -723,12 +723,12 @@ fn main() -> int:
 
 **Implementation Notes:**
 - Short-circuit evaluation for `and`/`or` (don't evaluate right side if not needed)
-- **Three `for` loop forms:**
+- **Two `for` loop forms and `while`:**
   - `for item in iterable:` — iteration over collections
   - `for i in range(start, end):` — counted iteration (`range()` is the only mechanism, no `..` for iteration)
-  - `for condition:` — condition-based loop (Ryo has no `while` keyword)
+  - `while condition:` — condition-based loop
 - **Loop variables are block-scoped** — not accessible after the loop ends
-- **Loop variables are immutable** — consistent with Ryo's default. Condition-based loops use externally declared `mut` variables
+- **Loop variables are immutable** — consistent with Ryo's default. While loops use externally declared `mut` variables
 - **`range()` is a built-in function** (like `print`). Only mechanism for counted iteration. Exclusive end.
 - **Operator separation:** `range()` for iteration, `:` for slicing (`s[1:4]`), `..` for type bounds only (`int(1..65535)`)
 - Break/continue affect **innermost loop only**. No labeled breaks in v0.1
