@@ -179,14 +179,7 @@ See Section 7.10 for complete configuration reference.
 
 ### 1.2 AI-Era Language Design
 
-As of 2026, the majority of application code is written by AI agents and reviewed, debugged, and maintained by both AI agents and human developers. Ryo's design acknowledges this shift and optimizes for this workflow.
-
-**The AI-Writes, Human-Reviews Model:**
-
-| Actor | Primary Activity | What They Need |
-|-------|-----------------|----------------|
-| **AI Agent** | Writing code, fixing bugs, refactoring | Strict rules, unambiguous semantics, predictable patterns |
-| **Human Developer** | Reviewing diffs, debugging production, understanding intent | Explicit code, readable patterns, clear error messages |
+Ryo assumes a workflow where AI agents write code and human developers review, debug, and maintain it. This design choice shapes several language features.
 
 **Design Implications:**
 
