@@ -239,6 +239,29 @@ Program (0..6)
 
 **Note:** Advanced features like project creation (`ryo new`), package management, and REPL are planned for future milestones.
 
+## Binary Inspection
+
+When debugging codegen output, these tools help verify what the compiler produces:
+
+```bash
+# Disassembly — see generated machine code
+objdump -d output.o          # Linux (GNU binutils)
+otool -tV output.o           # macOS
+
+# Symbol table — check exported/imported symbols
+nm output.o                  # List symbols (both platforms)
+nm -C output.o               # Demangle C++ / Rust symbols
+
+# Raw bytes — inspect object file structure
+xxd output.o | head -40      # Hex dump (first 40 lines)
+
+# Full binary after linking
+objdump -d my_program        # Disassemble final executable
+file my_program              # Verify binary format and architecture
+```
+
+**Typical workflow:** Compile with `cargo run -- build my_file.ryo`, then inspect the generated `.o` file or final binary to verify codegen correctness.
+
 ## Contributing
 
 We welcome contributions! Ryo is an ambitious project, and we need help with:
