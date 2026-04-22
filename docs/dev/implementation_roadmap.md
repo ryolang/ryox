@@ -867,7 +867,7 @@ fn main() -> int:
 - Structs are **moved by default** (ownership semantics)
 - Field order matters (affects memory layout)
 - No default values for fields (all must be initialized)
-- No methods yet (added in Milestone 18)
+- No methods yet (added in Milestone 17)
 - Parentheses with named arguments used for struct literals: `Point(x=1, y=2)`, reuses `name=value` parsing infrastructure from Milestone 8.5
 - Braces reserved exclusively for f-string interpolation
 - Dependencies: Milestone 4 (functions for passing structs), Milestone 8.5 (named argument parsing)
@@ -1351,7 +1351,7 @@ fn main() -> int:
 - Chaining returns `?T` (must handle with `orelse` or check)
 - Dependencies: Milestone 10 (enums provide foundation for tagged unions)
 
-### Milestone 18: Method Implementations
+### Milestone 17: Method Implementations
 **Goal:** Implement methods on types via `impl` blocks
 
 **Tasks:**
@@ -1403,7 +1403,7 @@ fn main() -> int:
 - No method overloading (one method per name per type)
 - Dependencies: Milestone 15 (ownership for self parameter)
 
-### Milestone 17: Traits
+### Milestone 18: Traits
 **Goal:** Implement trait system for behavior abstraction
 
 **Tasks:**
@@ -1445,7 +1445,7 @@ impl Printable for User:
 - No associated types or constants yet (future milestone)
 - No default implementations yet (future milestone)
 - Static dispatch via monomorphization (like Rust)
-- Dependencies: Milestone 18 (methods — impl blocks needed for trait implementations)
+- Dependencies: Milestone 17 (methods — impl blocks needed for trait implementations)
 
 ### Milestone 19: Immutable Borrows (`&T`)
 **Goal:** Implement immutable references to avoid unnecessary moves
@@ -1501,7 +1501,7 @@ fn main() -> int:
 - Lifetime tracking is **simplified** (no explicit lifetimes like Rust)
 - Borrow checker uses basic scope-based analysis
 - See [borrow_checker.md](borrow_checker.md) for the algorithm sketch
-- Dependencies: Milestone 18 (methods with &self)
+- Dependencies: Milestone 17 (methods with &self)
 
 ### Milestone 20: Mutable Borrows (`&mut T`)
 **Goal:** Implement mutable references with aliasing restrictions
@@ -1719,7 +1719,7 @@ fn early_return():
 - Drop order: **reverse of declaration order** (like Rust)
 - User-defined Drop for custom resources
 - Prevents resource leaks (files, sockets, memory)
-- Dependencies: Milestone 17 (traits), Milestone 20 (mutable borrows for &mut self)
+- Dependencies: Milestone 18 (traits), Milestone 20 (mutable borrows for &mut self)
 
 ## Phase 4: Module System & Core Ecosystem
 
@@ -2339,7 +2339,7 @@ fn main():
 **Why Post-v0.1.0:**
 - Hardcoded collections (Milestone 22) sufficient for v0.1.0
 - Generic implementation is complex (monomorphization, specialization)
-- Trait system must be mature and stable (Milestone 17)
+- Trait system must be mature and stable (Milestone 18)
 - Community feedback will inform design (variance, associated types, etc.)
 
 **Features:**
