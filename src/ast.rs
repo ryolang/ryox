@@ -233,6 +233,7 @@ impl Expression {
             ExprKind::Literal(lit) => match lit {
                 Literal::Int(n) => format!("Literal(Int({}))", n),
                 Literal::Str(s) => format!("Literal(Str(\"{}\"))", s),
+                Literal::Bool(b) => format!("Literal(Bool({}))", b),
             },
             ExprKind::Ident(name) => format!("Ident({})", name),
             ExprKind::BinaryOp(_, op, _) => format!("BinaryOp({})", op),
@@ -288,6 +289,8 @@ pub enum Literal {
     Int(isize),
     /// String literal
     Str(String),
+    /// Boolean literal
+    Bool(bool),
 }
 
 /// Binary operators.
@@ -297,6 +300,8 @@ pub enum BinaryOperator {
     Sub,
     Mul,
     Div,
+    Eq,
+    NotEq,
 }
 
 impl fmt::Display for BinaryOperator {
@@ -306,6 +311,8 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::Sub => write!(f, "-"),
             BinaryOperator::Mul => write!(f, "*"),
             BinaryOperator::Div => write!(f, "/"),
+            BinaryOperator::Eq => write!(f, "=="),
+            BinaryOperator::NotEq => write!(f, "!="),
         }
     }
 }
@@ -321,5 +328,22 @@ impl fmt::Display for UnaryOperator {
         match self {
             UnaryOperator::Neg => write!(f, "-"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binary_operator_display_for_equality() {
+        assert_eq!(format!("{}", BinaryOperator::Eq), "==");
+        assert_eq!(format!("{}", BinaryOperator::NotEq), "!=");
+    }
+
+    #[test]
+    fn literal_bool_variants_exist() {
+        let _t = Literal::Bool(true);
+        let _f = Literal::Bool(false);
     }
 }
