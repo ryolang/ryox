@@ -1,0 +1,11 @@
+# Minimal bool + equality example (M6.5)
+# Observable behavior arrives in M8 when `if` and `print(bool)` land.
+
+fn is_equal(a: int, b: int) -> bool:
+	return a == b
+
+fn main() -> int:
+	flag: bool = true
+	same = is_equal(3, 3)
+	different = 3 != 4
+	return 0
