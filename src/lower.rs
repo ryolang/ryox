@@ -234,19 +234,10 @@ fn lower_expr(
             let lhs = lower_expr(lhs, scope, signatures)?;
             let rhs = lower_expr(rhs, scope, signatures)?;
 
-            let op_str = match op {
-                ast::BinaryOperator::Add => "+",
-                ast::BinaryOperator::Sub => "-",
-                ast::BinaryOperator::Mul => "*",
-                ast::BinaryOperator::Div => "/",
-                ast::BinaryOperator::Eq => "==",
-                ast::BinaryOperator::NotEq => "!=",
-            };
-
             if lhs.ty != rhs.ty {
                 return Err(format!(
                     "type mismatch in '{}': left is '{}', right is '{}'",
-                    op_str, lhs.ty, rhs.ty
+                    op, lhs.ty, rhs.ty
                 ));
             }
 
@@ -258,13 +249,13 @@ fn lower_expr(
                     Type::Str => {
                         return Err(format!(
                             "equality operator '{}' not supported for type 'str' (yet)",
-                            op_str
+                            op
                         ));
                     }
                     Type::Void => {
                         return Err(format!(
                             "equality operator '{}' not supported for type 'void'",
-                            op_str
+                            op
                         ));
                     }
                 }
@@ -274,7 +265,7 @@ fn lower_expr(
                     _ => {
                         return Err(format!(
                             "arithmetic operator '{}' not supported for type '{}'",
-                            op_str, lhs.ty
+                            op, lhs.ty
                         ));
                     }
                 }
