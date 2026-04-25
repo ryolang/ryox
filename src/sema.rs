@@ -522,13 +522,24 @@ fn expect_ty(types: &TypeTable, r: InstRef) -> TypeId {
 mod tests {
     use super::*;
     use crate::astgen;
-    use crate::hir::{HirExpr, HirExprKind, HirProgram, HirStmt};
     use crate::lexer::lex;
     use crate::parser::program_parser;
+    use crate::uir::FuncBody;
     use chumsky::Parser;
     use chumsky::input::{Input, Stream};
 
-    fn run(input: &str) -> Result<(HirProgram, InternPool), Vec<Diag>> {
+    type RunOk = (Uir, Vec<Option<TypeId>>, InternPool);
+
+    /// Lex + parse + astgen + sema. Returns either the typed UIR
+    /// (alongside the side-table and pool) or the diagnostics that
+    /// stopped one of those stages.
+    ///
+    /// Tests inspect UIR directly: stmt/expr "kind" comes from
+    /// `uir.inst(r).tag`, payloads from `uir.var_decl_view(r)` etc.,
+    /// and resolved types from `types[r.index()]`. There is no HIR
+    /// reconstruction step \u2014 production codegen takes the same
+    /// `(uir, types)` pair this helper hands back.
+    fn run(input: &str) -> Result<RunOk, Vec<Diag>> {
         let mut pool = InternPool::new();
         let tokens = lex(input, &mut pool).expect("lex ok");
         let token_stream =
@@ -547,8 +558,7 @@ mod tests {
         if sink.has_errors() {
             return Err(sink.into_diags());
         }
-        let hir = astgen::uir_to_hir_typed(&uir, &types);
-        Ok((hir, pool))
+        Ok((uir, types, pool))
     }
 
     fn first_msg(diags: &[Diag]) -> &str {
@@ -559,83 +569,99 @@ mod tests {
         diags.iter().any(|d| d.code == code)
     }
 
-    fn assert_all_expr_types_resolved(hir: &HirProgram) {
-        for func in &hir.functions {
-            for stmt in &func.body {
-                match stmt {
-                    HirStmt::VarDecl { initializer, .. } => walk(initializer),
-                    HirStmt::Return(Some(e), _) => walk(e),
-                    HirStmt::Return(None, _) => {}
-                    HirStmt::Expr(e, _) => walk(e),
-                }
+    fn body_named<'a>(uir: &'a Uir, pool: &InternPool, name: &str) -> &'a FuncBody {
+        let id = pool.find_str(name).expect("name should be interned");
+        uir.func_bodies
+            .iter()
+            .find(|f| f.name == id)
+            .unwrap_or_else(|| panic!("no function named {:?}", name))
+    }
+
+    fn stmt_at(uir: &Uir, body: &FuncBody, i: usize) -> InstRef {
+        uir.body_stmts(body)[i]
+    }
+
+    /// Assert every reachable instruction in every function body
+    /// has a resolved type. Slot 0 (the reserved UIR sentinel) is
+    /// allowed to stay `None`.
+    fn assert_all_inst_types_resolved(uir: &Uir, types: &[Option<TypeId>]) {
+        for body in &uir.func_bodies {
+            for stmt_ref in uir.body_stmts(body) {
+                walk(uir, types, stmt_ref);
             }
         }
-        fn walk(e: &HirExpr) {
-            assert!(e.ty.is_some(), "unresolved HirExpr.ty after sema");
-            match &e.kind {
-                HirExprKind::BinaryOp(l, _, r) => {
-                    walk(l);
-                    walk(r);
+        fn walk(uir: &Uir, types: &[Option<TypeId>], r: InstRef) {
+            assert!(
+                types[r.index()].is_some(),
+                "no type recorded for inst %{}",
+                r.index()
+            );
+            let inst = uir.inst(r);
+            match inst.data {
+                InstData::None
+                | InstData::Int(_)
+                | InstData::Str(_)
+                | InstData::Bool(_)
+                | InstData::Var(_) => {}
+                InstData::UnOp(o) => walk(uir, types, o),
+                InstData::BinOp { lhs, rhs } => {
+                    walk(uir, types, lhs);
+                    walk(uir, types, rhs);
                 }
-                HirExprKind::UnaryOp(_, s) => walk(s),
-                HirExprKind::Call(_, args) => args.iter().for_each(walk),
-                _ => {}
+                InstData::Extra(_) => match inst.tag {
+                    InstTag::Call => uir
+                        .call_view(r)
+                        .args
+                        .iter()
+                        .for_each(|a| walk(uir, types, *a)),
+                    InstTag::VarDecl => walk(uir, types, uir.var_decl_view(r).initializer),
+                    _ => {}
+                },
             }
         }
     }
 
     #[test]
     fn fills_types_on_flat_integer_var() {
-        let (hir, pool) = run("x = 42").unwrap();
-        assert_all_expr_types_resolved(&hir);
-        let main = &hir.functions[0];
+        let (uir, types, pool) = run("x = 42").unwrap();
+        assert_all_inst_types_resolved(&uir, &types);
+        let main = body_named(&uir, &pool, "main");
         assert_eq!(main.return_type, pool.int());
-        match &main.body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.int())),
-            _ => panic!(),
-        }
+        let var_decl = stmt_at(&uir, main, 0);
+        assert_eq!(types[var_decl.index()], Some(pool.int()));
     }
 
     #[test]
     fn infers_string_literal_type() {
-        let (hir, pool) = run("x = \"hello\"").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.str_())),
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x = \"hello\"").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        assert_eq!(types[var_decl.index()], Some(pool.str_()));
     }
 
     #[test]
     fn typed_variable_annotation_honored() {
-        let (hir, pool) = run("x: int = 42").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.int())),
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x: int = 42").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        assert_eq!(types[var_decl.index()], Some(pool.int()));
     }
 
     #[test]
     fn bool_annotation_resolves() {
-        let (hir, pool) = run("x: bool = true").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.bool_())),
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x: bool = true").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        assert_eq!(types[var_decl.index()], Some(pool.bool_()));
     }
 
     #[test]
     fn variable_reference_type_resolved() {
-        let (hir, pool) = run("x = 42\ny = x").unwrap();
-        match &hir.functions[0].body[1] {
-            HirStmt::VarDecl {
-                ty, initializer, ..
-            } => {
-                assert_eq!(*ty, Some(pool.int()));
-                assert_eq!(initializer.expect_ty(), pool.int());
-                assert!(matches!(initializer.kind, HirExprKind::Var(_)));
-            }
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x = 42\ny = x").unwrap();
+        let stmts = uir.body_stmts(&uir.func_bodies[0]);
+        // Second stmt is `y = x`; its initializer should be a Var
+        // with int type.
+        let v = uir.var_decl_view(stmts[1]);
+        assert_eq!(types[stmts[1].index()], Some(pool.int()));
+        assert_eq!(types[v.initializer.index()], Some(pool.int()));
+        assert!(matches!(uir.inst(v.initializer).tag, InstTag::Var));
     }
 
     #[test]
@@ -676,59 +702,43 @@ mod tests {
     fn function_call_return_type_resolved() {
         let code =
             "fn double(x: int) -> int:\n\treturn x * 2\n\nfn main() -> int:\n\treturn double(3)\n";
-        let (hir, pool) = run(code).unwrap();
-        let main = hir
-            .functions
-            .iter()
-            .find(|f| pool.str(f.name) == "main")
-            .unwrap();
-        match &main.body[0] {
-            HirStmt::Return(Some(e), _) => {
-                assert_eq!(e.expect_ty(), pool.int());
-                assert!(matches!(e.kind, HirExprKind::Call(_, _)));
-            }
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run(code).unwrap();
+        let main = body_named(&uir, &pool, "main");
+        let ret = stmt_at(&uir, main, 0);
+        // `Return x` carries the operand in InstData::UnOp.
+        let operand = match uir.inst(ret).data {
+            InstData::UnOp(o) => o,
+            other => panic!("expected Return UnOp, got {:?}", other),
+        };
+        assert_eq!(types[operand.index()], Some(pool.int()));
+        assert!(matches!(uir.inst(operand).tag, InstTag::Call));
     }
 
     #[test]
     fn void_function_signature() {
-        let code = "fn greet():\n\tprint(\"hi\")\n\nfn main() -> int:\n\tgreet()\n\treturn 0\n";
-        let (hir, pool) = run(code).unwrap();
-        let greet = hir
-            .functions
-            .iter()
-            .find(|f| pool.str(f.name) == "greet")
-            .unwrap();
+        let (uir, _types, pool) =
+            run("fn greet():\n\tprint(\"hi\")\n\nfn main() -> int:\n\tgreet()\n\treturn 0\n")
+                .unwrap();
+        let greet = body_named(&uir, &pool, "greet");
         assert_eq!(greet.return_type, pool.void());
     }
 
     #[test]
     fn print_call_has_int_type() {
-        let (hir, pool) = run("msg = print(\"Hello\\n\")").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl {
-                ty, initializer, ..
-            } => {
-                assert_eq!(*ty, Some(pool.int()));
-                assert_eq!(initializer.expect_ty(), pool.int());
-            }
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("msg = print(\"Hello\\n\")").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        let v = uir.var_decl_view(var_decl);
+        assert_eq!(types[var_decl.index()], Some(pool.int()));
+        assert_eq!(types[v.initializer.index()], Some(pool.int()));
     }
 
     #[test]
     fn int_equality_yields_bool() {
-        let (hir, pool) = run("x = 1 == 2").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl {
-                ty, initializer, ..
-            } => {
-                assert_eq!(*ty, Some(pool.bool_()));
-                assert_eq!(initializer.expect_ty(), pool.bool_());
-            }
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x = 1 == 2").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        let v = uir.var_decl_view(var_decl);
+        assert_eq!(types[var_decl.index()], Some(pool.bool_()));
+        assert_eq!(types[v.initializer.index()], Some(pool.bool_()));
     }
 
     #[test]
@@ -774,16 +784,11 @@ mod tests {
 
     #[test]
     fn bool_literal_true_type() {
-        let (hir, pool) = run("x = true").unwrap();
-        match &hir.functions[0].body[0] {
-            HirStmt::VarDecl {
-                ty, initializer, ..
-            } => {
-                assert_eq!(*ty, Some(pool.bool_()));
-                assert!(matches!(initializer.kind, HirExprKind::BoolLiteral(true)));
-            }
-            _ => panic!(),
-        }
+        let (uir, types, pool) = run("x = true").unwrap();
+        let var_decl = stmt_at(&uir, &uir.func_bodies[0], 0);
+        let v = uir.var_decl_view(var_decl);
+        assert_eq!(types[var_decl.index()], Some(pool.bool_()));
+        assert!(matches!(uir.inst(v.initializer).data, InstData::Bool(true)));
     }
 
     #[test]
@@ -862,24 +867,16 @@ mod tests {
 
     #[test]
     fn nested_expression_types_all_filled() {
-        let (hir, _) = run("x = (1 + 2) * -3").unwrap();
-        assert_all_expr_types_resolved(&hir);
+        let (uir, types, _) = run("x = (1 + 2) * -3").unwrap();
+        assert_all_inst_types_resolved(&uir, &types);
     }
 
     #[test]
     fn type_table_indexed_by_inst_ref() {
-        // Direct UIR-level smoke test: every visited instruction
-        // ends up with a Some entry; slot 0 (the reserved sentinel)
-        // stays None.
-        let mut pool = InternPool::new();
-        let tokens = lex("x = 1 + 2", &mut pool).unwrap();
-        let stream = Stream::from_iter(tokens).map((0..0usize).into(), |(t, s): (_, _)| (t, s));
-        let program = program_parser().parse(stream).into_result().unwrap();
-        let mut sink = DiagSink::new();
-        let uir = astgen::generate(&program, &mut pool, &mut sink);
-        let types = analyze(&uir, &mut pool, &mut sink);
-        assert!(!sink.has_errors());
-
+        // Side-table is the same length as `instructions`; slot 0
+        // (the reserved sentinel) stays None; every reachable inst
+        // ends up Some.
+        let (uir, types, _) = run("x = 1 + 2").unwrap();
         assert_eq!(types.len(), uir.instructions.len());
         assert_eq!(types[0], None, "slot 0 is the reserved sentinel");
         for (idx, t) in types.iter().enumerate().skip(1) {

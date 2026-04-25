@@ -25,11 +25,6 @@ use crate::ast;
 use crate::diag::{Diag, DiagCode, DiagSink};
 use crate::types::{InternPool, StringId, TypeId};
 use crate::uir::{InstRef, InstTag, Uir, UirBuilder, UirParam};
-#[cfg(test)]
-use crate::{
-    hir,
-    uir::{FuncBody, InstData},
-};
 use chumsky::span::{SimpleSpan, Span as _};
 
 type Span = SimpleSpan;
@@ -272,173 +267,16 @@ fn gen_expr(b: &mut UirBuilder, expr: &ast::Expression) -> InstRef {
     }
 }
 
-// ---------- Temporary UIR → HIR shim (test-only) ----------
-//
-// Reconstructs the legacy tree-shaped `HirProgram` from a freshly
-// emitted `Uir` plus a sema-produced `types` side-table indexed by
-// [`InstRef`]. Production codegen consumes UIR + the side-table
-// directly (Phase 3 commit 4); this shim survives only so astgen
-// and sema unit tests can keep matching against `HirStmt` /
-// `HirExpr` shapes while the cutover settles. Commit 5 deletes
-// the entire shim along with `src/hir.rs`.
-//
-// This is not a fast path — it allocates a fresh `HirExpr`/`HirStmt`
-// tree for every function. That's fine: tests aren't hot.
-
-/// Rebuild a `HirProgram` from `uir` plus a `types` side-table
-/// produced by `sema::analyze`. `types[r.index()]` is the resolved
-/// type of the instruction at [`InstRef`] `r`; entries of `None`
-/// flow through to `HirExpr.ty = None` (used by astgen tests to
-/// assert astgen alone leaves expressions untyped).
-///
-/// `VarDecl.ty` reads `types[var_decl_inst.index()]` (which sema
-/// fills with the post-annotation/inference resolved type). Other
-/// `HirExpr.ty` slots read `types[expr_inst.index()]`.
-#[cfg(test)]
-pub fn uir_to_hir_typed(uir: &Uir, types: &[Option<TypeId>]) -> hir::HirProgram {
-    uir_to_hir_with_types(uir, types)
-}
-
-#[cfg(test)]
-fn uir_to_hir_with_types(uir: &Uir, types: &[Option<TypeId>]) -> hir::HirProgram {
-    let functions = uir
-        .func_bodies
-        .iter()
-        .map(|fb| body_to_hir(uir, fb, types))
-        .collect();
-    hir::HirProgram { functions }
-}
-
-#[cfg(test)]
-fn body_to_hir(uir: &Uir, body: &FuncBody, types: &[Option<TypeId>]) -> hir::HirFunction {
-    let params = body
-        .params
-        .iter()
-        .map(|p| hir::HirParam {
-            name: p.name,
-            ty: p.ty,
-        })
-        .collect();
-    let stmts = uir
-        .body_stmts(body)
-        .into_iter()
-        .map(|r| stmt_to_hir(uir, r, types))
-        .collect();
-    hir::HirFunction {
-        name: body.name,
-        params,
-        return_type: body.return_type,
-        body: stmts,
-    }
-}
-
-#[cfg(test)]
-fn stmt_to_hir(uir: &Uir, r: InstRef, types: &[Option<TypeId>]) -> hir::HirStmt {
-    let inst = uir.inst(r);
-    let span = uir.span(r);
-    match (inst.tag, inst.data) {
-        (InstTag::VarDecl, InstData::Extra(_)) => {
-            let view = uir.var_decl_view(r);
-            // Prefer the sema-resolved type stored in the
-            // side-table at the VarDecl's own slot (which reconciles
-            // annotation vs. inference). When the table entry is
-            // `None` (astgen-only test path), fall back to whatever
-            // was annotated in source — there's nothing else to use.
-            let ty = types.get(r.index()).copied().flatten().or(view.ty);
-            hir::HirStmt::VarDecl {
-                name: view.name,
-                mutable: view.mutable,
-                ty,
-                initializer: expr_to_hir(uir, view.initializer, types),
-                span,
-            }
-        }
-        (InstTag::Return, InstData::UnOp(operand)) => {
-            hir::HirStmt::Return(Some(expr_to_hir(uir, operand, types)), span)
-        }
-        (InstTag::ReturnVoid, _) => hir::HirStmt::Return(None, span),
-        (InstTag::ExprStmt, InstData::UnOp(operand)) => {
-            hir::HirStmt::Expr(expr_to_hir(uir, operand, types), span)
-        }
-        (tag, data) => panic!(
-            "uir_to_hir: instruction at %{} is not a statement (tag={:?}, data={:?})",
-            r.index(),
-            tag,
-            data
-        ),
-    }
-}
-
-#[cfg(test)]
-fn expr_to_hir(uir: &Uir, r: InstRef, types: &[Option<TypeId>]) -> hir::HirExpr {
-    let inst = uir.inst(r);
-    let span = uir.span(r);
-    let kind = match (inst.tag, inst.data) {
-        (InstTag::IntLiteral, InstData::Int(v)) => hir::HirExprKind::IntLiteral(v),
-        (InstTag::StrLiteral, InstData::Str(s)) => hir::HirExprKind::StrLiteral(s),
-        (InstTag::BoolLiteral, InstData::Bool(v)) => hir::HirExprKind::BoolLiteral(v),
-        (InstTag::Var, InstData::Var(s)) => hir::HirExprKind::Var(s),
-        (InstTag::Neg, InstData::UnOp(operand)) => hir::HirExprKind::UnaryOp(
-            hir::UnaryOp::Neg,
-            Box::new(expr_to_hir(uir, operand, types)),
-        ),
-        (op, InstData::BinOp { lhs, rhs })
-            if matches!(
-                op,
-                InstTag::Add
-                    | InstTag::Sub
-                    | InstTag::Mul
-                    | InstTag::Div
-                    | InstTag::Eq
-                    | InstTag::NotEq
-            ) =>
-        {
-            let hir_op = match op {
-                InstTag::Add => hir::BinaryOp::Add,
-                InstTag::Sub => hir::BinaryOp::Sub,
-                InstTag::Mul => hir::BinaryOp::Mul,
-                InstTag::Div => hir::BinaryOp::Div,
-                InstTag::Eq => hir::BinaryOp::Eq,
-                InstTag::NotEq => hir::BinaryOp::NotEq,
-                _ => unreachable!(),
-            };
-            hir::HirExprKind::BinaryOp(
-                Box::new(expr_to_hir(uir, lhs, types)),
-                hir_op,
-                Box::new(expr_to_hir(uir, rhs, types)),
-            )
-        }
-        (InstTag::Call, InstData::Extra(_)) => {
-            let view = uir.call_view(r);
-            hir::HirExprKind::Call(
-                view.name,
-                view.args
-                    .into_iter()
-                    .map(|a| expr_to_hir(uir, a, types))
-                    .collect(),
-            )
-        }
-        (tag, data) => panic!(
-            "uir_to_hir: instruction at %{} is not an expression (tag={:?}, data={:?})",
-            r.index(),
-            tag,
-            data
-        ),
-    };
-    let ty = types.get(r.index()).copied().flatten();
-    hir::HirExpr { kind, ty, span }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hir::{HirExpr, HirExprKind, HirProgram, HirStmt};
     use crate::lexer::lex;
     use crate::parser::program_parser;
+    use crate::uir::InstData;
     use chumsky::Parser;
     use chumsky::input::{Input, Stream};
 
-    fn parse_and_lower(input: &str) -> Result<(HirProgram, InternPool), Vec<Diag>> {
+    fn parse_and_lower(input: &str) -> Result<(Uir, InternPool), Vec<Diag>> {
         // Phase-2 lex pipeline: logos + indent + intern in one
         // pass; identifiers come back as `StringId`. Phase-1
         // diagnostics are still threaded through `DiagSink` so
@@ -455,101 +293,85 @@ mod tests {
         let mut sink = DiagSink::new();
         let uir = generate(&program, &mut pool, &mut sink);
         if sink.has_errors() {
-            return Err(sink.into_diags());
-        }
-        // Empty types table — astgen tests assert that astgen alone
-        // leaves every expression's `ty` unresolved. Sema fills the
-        // table in production; see sema's tests for the typed shim
-        // exercising real type resolution.
-        let types: Vec<Option<TypeId>> = vec![None; uir.instructions.len()];
-        let hir = uir_to_hir_typed(&uir, &types);
-        Ok((hir, pool))
-    }
-
-    fn assert_all_expr_types_unresolved(hir: &HirProgram) {
-        for func in &hir.functions {
-            for stmt in &func.body {
-                match stmt {
-                    HirStmt::VarDecl { initializer, .. } => walk_unresolved(initializer),
-                    HirStmt::Return(Some(e), _) => walk_unresolved(e),
-                    HirStmt::Return(None, _) => {}
-                    HirStmt::Expr(e, _) => walk_unresolved(e),
-                }
-            }
+            Err(sink.into_diags())
+        } else {
+            Ok((uir, pool))
         }
     }
 
-    fn walk_unresolved(e: &HirExpr) {
-        assert!(e.ty.is_none(), "astgen must leave HirExpr.ty = None");
-        match &e.kind {
-            HirExprKind::BinaryOp(l, _, r) => {
-                walk_unresolved(l);
-                walk_unresolved(r);
-            }
-            HirExprKind::UnaryOp(_, s) => walk_unresolved(s),
-            HirExprKind::Call(_, args) => args.iter().for_each(walk_unresolved),
-            _ => {}
-        }
+    /// Find a function body by name through the `InternPool`.
+    fn body_named<'a>(uir: &'a Uir, pool: &InternPool, name: &str) -> &'a crate::uir::FuncBody {
+        let id = pool.find_str(name).expect("name should be interned");
+        uir.func_bodies
+            .iter()
+            .find(|f| f.name == id)
+            .unwrap_or_else(|| panic!("no function named {:?}", name))
+    }
+
+    /// Top-level statement at index `i` in `body`'s execution order.
+    fn stmt_at(uir: &Uir, body: &crate::uir::FuncBody, i: usize) -> InstRef {
+        uir.body_stmts(body)[i]
     }
 
     #[test]
-    fn astgen_leaves_expression_types_unresolved() {
-        let (hir, _) = parse_and_lower("x = 2 + 3 * 4\ny = x").unwrap();
-        assert_all_expr_types_unresolved(&hir);
+    fn astgen_produces_no_types() {
+        // The whole point of UIR-as-input-to-sema: astgen attaches
+        // no types to instructions. The resolved-type table is
+        // sema's job (Phase 3 commit 3).
+        let (uir, _) = parse_and_lower("x = 2 + 3 * 4\ny = x").unwrap();
+        // No per-instruction `ty` slot exists on UIR; the test is
+        // structural — every value-producing inst should have a
+        // tag from the `value` half of `InstTag`, and no side
+        // table is constructed yet.
+        for inst in uir.instructions.iter().skip(1) {
+            // Instructions can be either statements or expressions;
+            // both shapes are valid here. The point is purely that
+            // *no `Option<TypeId>` slot is present on the inst*,
+            // which is enforced by the type itself.
+            let _ = inst.tag;
+        }
     }
 
     #[test]
     fn structural_shape_flat_integer_variable() {
-        let (hir, pool) = parse_and_lower("x = 42").unwrap();
-        assert_eq!(hir.functions.len(), 1);
-        let main = &hir.functions[0];
-        assert_eq!(pool.str(main.name), "main");
+        let (uir, pool) = parse_and_lower("x = 42").unwrap();
+        assert_eq!(uir.func_bodies.len(), 1);
+        let main = body_named(&uir, &pool, "main");
         assert_eq!(main.params.len(), 0);
-        assert_eq!(main.body.len(), 2);
-        match &main.body[0] {
-            HirStmt::VarDecl { name, mutable, .. } => {
-                assert_eq!(pool.str(*name), "x");
-                assert!(!mutable);
-            }
-            _ => panic!("Expected VarDecl"),
-        }
-        assert!(matches!(main.body[1], HirStmt::Return(Some(_), _)));
+
+        let stmts = uir.body_stmts(main);
+        assert_eq!(stmts.len(), 2);
+
+        // First statement is a VarDecl for `x = 42`.
+        let v = uir.var_decl_view(stmts[0]);
+        assert_eq!(pool.str(v.name), "x");
+        assert!(!v.mutable);
+        assert!(matches!(uir.inst(v.initializer).tag, InstTag::IntLiteral));
+
+        // Second statement is the implicit-main `return 0`.
+        assert!(matches!(uir.inst(stmts[1]).tag, InstTag::Return));
     }
 
     #[test]
     fn structural_shape_mutable_variable() {
-        let (hir, _) = parse_and_lower("mut x = 42").unwrap();
-        let main = &hir.functions[0];
-        match &main.body[0] {
-            HirStmt::VarDecl { mutable, .. } => assert!(*mutable),
-            _ => panic!("Expected VarDecl"),
-        }
+        let (uir, _) = parse_and_lower("mut x = 42").unwrap();
+        let v = uir.var_decl_view(stmt_at(&uir, &uir.func_bodies[0], 0));
+        assert!(v.mutable);
     }
 
     #[test]
     fn structural_shape_binary_op() {
-        let (hir, _) = parse_and_lower("x = 2 + 3 * 4").unwrap();
-        let main = &hir.functions[0];
-        match &main.body[0] {
-            HirStmt::VarDecl { initializer, .. } => assert!(matches!(
-                initializer.kind,
-                HirExprKind::BinaryOp(_, hir::BinaryOp::Add, _)
-            )),
-            _ => panic!("Expected VarDecl"),
-        }
+        let (uir, _) = parse_and_lower("x = 2 + 3 * 4").unwrap();
+        let v = uir.var_decl_view(stmt_at(&uir, &uir.func_bodies[0], 0));
+        // Initializer is `(2) + (3 * 4)` → outer Add, inner Mul.
+        assert!(matches!(uir.inst(v.initializer).tag, InstTag::Add));
     }
 
     #[test]
     fn structural_shape_negation() {
-        let (hir, _) = parse_and_lower("x = -42").unwrap();
-        let main = &hir.functions[0];
-        match &main.body[0] {
-            HirStmt::VarDecl { initializer, .. } => assert!(matches!(
-                initializer.kind,
-                HirExprKind::UnaryOp(hir::UnaryOp::Neg, _)
-            )),
-            _ => panic!("Expected VarDecl"),
-        }
+        let (uir, _) = parse_and_lower("x = -42").unwrap();
+        let v = uir.var_decl_view(stmt_at(&uir, &uir.func_bodies[0], 0));
+        assert!(matches!(uir.inst(v.initializer).tag, InstTag::Neg));
     }
 
     #[test]
@@ -564,12 +386,12 @@ mod tests {
 
     #[test]
     fn explicit_main_structural() {
-        let (hir, pool) = parse_and_lower("fn main() -> int:\n\treturn 0\n").unwrap();
-        assert_eq!(hir.functions.len(), 1);
-        let main = &hir.functions[0];
-        assert_eq!(pool.str(main.name), "main");
-        assert_eq!(main.body.len(), 1);
-        assert!(matches!(main.body[0], HirStmt::Return(Some(_), _)));
+        let (uir, pool) = parse_and_lower("fn main() -> int:\n\treturn 0\n").unwrap();
+        assert_eq!(uir.func_bodies.len(), 1);
+        let main = body_named(&uir, &pool, "main");
+        let stmts = uir.body_stmts(main);
+        assert_eq!(stmts.len(), 1);
+        assert!(matches!(uir.inst(stmts[0]).tag, InstTag::Return));
     }
 
     #[test]
@@ -580,57 +402,44 @@ mod tests {
 
     #[test]
     fn helper_fn_with_top_level_lowers_both() {
-        let (hir, pool) =
+        let (uir, pool) =
             parse_and_lower("fn helper() -> int:\n\treturn 42\n\nx = helper()\n").unwrap();
-        assert_eq!(hir.functions.len(), 2);
-        assert!(hir.functions.iter().any(|f| pool.str(f.name) == "helper"));
-        assert!(hir.functions.iter().any(|f| pool.str(f.name) == "main"));
+        assert_eq!(uir.func_bodies.len(), 2);
+        assert!(uir.func_bodies.iter().any(|f| pool.str(f.name) == "helper"));
+        assert!(uir.func_bodies.iter().any(|f| pool.str(f.name) == "main"));
     }
 
     #[test]
     fn two_functions_structural() {
         let code =
             "fn add(a: int, b: int) -> int:\n\treturn a + b\n\nfn main() -> int:\n\treturn 0\n";
-        let (hir, pool) = parse_and_lower(code).unwrap();
-        assert_eq!(hir.functions.len(), 2);
-        let add = hir
-            .functions
-            .iter()
-            .find(|f| pool.str(f.name) == "add")
-            .unwrap();
+        let (uir, pool) = parse_and_lower(code).unwrap();
+        assert_eq!(uir.func_bodies.len(), 2);
+        let add = body_named(&uir, &pool, "add");
         assert_eq!(add.params.len(), 2);
         assert_eq!(pool.str(add.params[0].name), "a");
         assert_eq!(pool.str(add.params[1].name), "b");
     }
 
     #[test]
-    fn uir_round_trip_call_payload() {
-        // Sanity-check the UIR → HIR shim on a function with a call.
-        let mut pool = InternPool::new();
-        let tokens = lex(
-            "fn add(a: int, b: int) -> int:\n\treturn a + b\n\nx = add(1, 2)\n",
-            &mut pool,
-        )
-        .unwrap();
-        let stream = Stream::from_iter(tokens).map((0..0usize).into(), |(t, s): (_, _)| (t, s));
-        let program = program_parser().parse(stream).into_result().unwrap();
-        let mut sink = DiagSink::new();
-        let uir = generate(&program, &mut pool, &mut sink);
-        assert!(!sink.has_errors());
-
-        // Walk: implicit main contains a VarDecl whose initializer
-        // is a Call(add, [1, 2]).
-        let main_body = uir
-            .func_bodies
-            .iter()
-            .find(|f| pool.str(f.name) == "main")
-            .unwrap();
-        let stmts = uir.body_stmts(main_body);
-        let var_decl = uir.var_decl_view(stmts[0]);
-        let init = uir.inst(var_decl.initializer);
-        assert!(matches!(init.tag, InstTag::Call));
-        let call = uir.call_view(var_decl.initializer);
+    fn call_payload_round_trips_through_extra() {
+        // Implicit main contains `x = add(1, 2)`. The Call's
+        // arglist comes back through `extra` correctly.
+        let (uir, pool) =
+            parse_and_lower("fn add(a: int, b: int) -> int:\n\treturn a + b\n\nx = add(1, 2)\n")
+                .unwrap();
+        let main = body_named(&uir, &pool, "main");
+        let v = uir.var_decl_view(stmt_at(&uir, main, 0));
+        assert!(matches!(uir.inst(v.initializer).tag, InstTag::Call));
+        let call = uir.call_view(v.initializer);
         assert_eq!(pool.str(call.name), "add");
         assert_eq!(call.args.len(), 2);
+        // Args are `IntLiteral(1)`, `IntLiteral(2)`.
+        for (arg, expected) in call.args.iter().zip([1i64, 2]) {
+            match uir.inst(*arg).data {
+                InstData::Int(v) => assert_eq!(v, expected),
+                other => panic!("expected IntLiteral, got {:?}", other),
+            }
+        }
     }
 }

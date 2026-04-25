@@ -1,8 +1,8 @@
-// Astgen wires up the constructors and the call/var_decl read views.
-// The `Display` impl, decoder helpers for tags not yet emitted, and a
-// few primitive accessors will only see use once sema (commit 3) and
-// codegen (commit 4) consume UIR directly. Allow until then; CI runs
-// with `-Dwarnings`.
+// Some helpers (the `Display` dump, primitive `from_raw` /
+// `as_range` accessors, and decoders for tags not yet emitted from
+// astgen) are reachable only from the `ryo ir --emit=uir` flag
+// (still TODO) and from future phases (TIR, comptime). Allow until
+// then so CI's `-Dwarnings` doesn't fire on shape-only scaffolding.
 #![allow(dead_code)]
 
 //! Untyped Intermediate Representation (UIR).
