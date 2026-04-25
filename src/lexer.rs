@@ -30,6 +30,10 @@ pub enum Token<'a> {
     Enum,
     #[token("match")]
     Match,
+    #[token("true")]
+    True,
+    #[token("false")]
+    False,
 
     // Identifiers (must come after keywords)
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
@@ -46,6 +50,12 @@ pub enum Token<'a> {
     Mul,
     #[token("/")]
     Div,
+
+    // Operators - Comparison
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    NotEq,
 
     // Operators - Assignment and Type Annotation
     #[token("=")]
@@ -98,6 +108,8 @@ impl fmt::Display for Token<'_> {
             Self::Struct => write!(f, "struct"),
             Self::Enum => write!(f, "enum"),
             Self::Match => write!(f, "match"),
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
 
             // Identifiers
             Self::Ident(s) => write!(f, "{}", s),
@@ -108,6 +120,10 @@ impl fmt::Display for Token<'_> {
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
+
+            // Operators - Comparison
+            Self::EqEq => write!(f, "=="),
+            Self::NotEq => write!(f, "!="),
 
             // Operators - Assignment and Type Annotation
             Self::Assign => write!(f, "="),
@@ -148,11 +164,15 @@ pub(crate) fn leak_token<'a>(tok: Token<'a>) -> Token<'static> {
         Token::Struct => Token::Struct,
         Token::Enum => Token::Enum,
         Token::Match => Token::Match,
+        Token::True => Token::True,
+        Token::False => Token::False,
         Token::Add => Token::Add,
         Token::Arrow => Token::Arrow,
         Token::Sub => Token::Sub,
         Token::Mul => Token::Mul,
         Token::Div => Token::Div,
+        Token::EqEq => Token::EqEq,
+        Token::NotEq => Token::NotEq,
         Token::Assign => Token::Assign,
         Token::Colon => Token::Colon,
         Token::LParen => Token::LParen,
@@ -435,5 +455,38 @@ mod tests {
         assert_eq!(tokens[1], Token::LParen);
         assert!(matches!(tokens[2], Token::Str("\"hello\"")));
         assert_eq!(tokens[3], Token::RParen);
+    }
+
+    #[test]
+    fn tokenize_bool_keywords_and_equality() {
+        let tokens = tokenize("true false == !=");
+        assert_eq!(
+            tokens,
+            vec![Token::True, Token::False, Token::EqEq, Token::NotEq,]
+        );
+    }
+
+    #[test]
+    fn tokenize_single_eq_vs_double_eq() {
+        let tokens = tokenize("x = 1");
+        assert_eq!(tokens[1], Token::Assign);
+
+        let tokens = tokenize("x == 1");
+        assert_eq!(tokens[1], Token::EqEq);
+    }
+
+    #[test]
+    fn tokenize_equality_operators_without_surrounding_whitespace() {
+        let tokens = tokenize("x==1");
+        assert_eq!(
+            tokens,
+            vec![Token::Ident("x"), Token::EqEq, Token::Int("1")]
+        );
+
+        let tokens = tokenize("x!=y");
+        assert_eq!(
+            tokens,
+            vec![Token::Ident("x"), Token::NotEq, Token::Ident("y")]
+        );
     }
 }

@@ -553,6 +553,38 @@ fn main() -> int:
 - Conditional compilation: `#[cfg(test)]`
 - Workspace support for multi-package projects
 
+### Milestone 6.5: Booleans & Equality
+**Goal:** Add `bool` primitive type and equality operators as a precondition for M7 and M8.
+
+**Status:** ✅ COMPLETE — `bool` type, `true`/`false` literals, and `==`/`!=` operators implemented end-to-end.
+
+**What was implemented:**
+- Added `true` and `false` keyword tokens and `==` / `!=` operator tokens to the lexer
+- Extended AST with `Literal::Bool` and `BinaryOperator::Eq` / `NotEq`
+- Parse boolean literals and equality expressions (non-associative, below additive precedence)
+- Extended HIR with `Type::Bool`, `HirExprKind::BoolLiteral`, and equality `BinaryOp` variants
+- Type-check equality: same-type operands; supported on `int` and `bool`; `str` and `void` rejected
+- Codegen: maps `Type::Bool` to Cranelift `I8`; emits `icmp` for equality; `cranelift_type_for` helper makes variable declaration type-aware
+- Unit tests across lexer, parser, lowering, and codegen layers
+- Integration test verifying a bool program compiles and exits 0
+
+**Visible Progress:** Programs can declare bool variables and compute equality. Bool values remain unobservable until M8 (no `if` or `print(bool)` yet).
+
+**Example:**
+```ryo
+fn main() -> int:
+	flag = true
+	same = 1 == 1
+	diff = 1 != 1
+	return 0
+```
+
+**Implementation Notes:**
+- No implicit coercion between `bool` and `int` (Zig-style).
+- Equality is non-chaining: `a == b == c` is a parse error.
+- String equality is deferred; the error message says `(yet)` to signal future support.
+- Dependencies: Milestone 4 (functions).
+
 ### Milestone 7: Expressions & Operators (Extended)
 **Goal:** Support float type and extended operators
 
@@ -560,12 +592,12 @@ fn main() -> int:
 - Add `float` type to lexer/parser/AST
 - Extend type system to handle `int` (defaults to `i64`) and `float` separately
 - Add float literal parsing: `3.14`, `2.5`
-- Add comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Add ordering comparison operators: `<`, `>`, `<=`, `>=` (`==` and `!=` added in M6.5)
 - Add division operator (`/`) with integer division semantics
 - Add modulo operator (`%`)
 - Implement basic type checking:
   - Cannot mix `int` and `float` in operations without explicit conversion
-  - Comparison operators return `bool` (added in M6)
+  - Ordering comparisons return `bool` (`bool` added in M6.5)
 - Extend Codegen: Generate IR for:
   - Float arithmetic operations
   - Comparison operations
@@ -590,7 +622,7 @@ remainder = a % b     # 1
 - Float arithmetic uses IEEE 754 semantics
 - Integer division truncates toward zero
 - Type errors are clear and localized (bidirectional type checking)
-- Dependencies: Milestone 4 (functions for testing)
+- Dependencies: Milestone 4 (functions for testing), Milestone 6.5 (provides bool type and `==`/`!=` semantics)
 
 ### Milestone 8: Control Flow & Booleans
 **Goal:** Implement `if/else` statements, `for` loops, and boolean logic
@@ -601,8 +633,7 @@ remainder = a % b     # 1
   - Update `print()` signature from placeholder `int` to proper `void`
   - Type checker prevents using void values in expressions
   - Enable functions with no return: `fn do_something() -> void:`
-- Add `bool` type to type system
-- Add boolean literals: `true`, `false`
+- (`bool` type and `true`/`false` literals already exist from M6.5)
 - Add logical operators: `and`, `or`, `not`
 - Extend Parser/AST:
   - `StmtKind::IfStmt` with optional `else` branch
@@ -651,7 +682,7 @@ fn main() -> int:
 - **Operator separation:** `range()` for iteration, `:` for slicing (`s[1:4]`), `..` for type bounds only (`int(1..65535)`)
 - Break/continue affect **innermost loop only**. No labeled breaks in v0.1
 - If expressions (returning values) deferred to later milestone
-- Dependencies: Milestone 7 (comparison operators)
+- Dependencies: Milestone 7 (ordering comparisons), Milestone 6.5 (bool type and equality)
 
 ### Milestone 8.5: Default Parameters & Named Arguments
 **Goal:** Support default parameter values and named arguments for all functions (user-defined and builtins), with named-by-default calling convention
