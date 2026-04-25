@@ -21,6 +21,11 @@ Resolved entries are removed (not kept around as a changelog). Look at `git log`
 **Summary:** `if`/`else`/`match` are lexed as keywords but have no parser, no HIR variants, and no codegen support (no block branching or phi handling). This is the single largest blocker for advancing past Milestone 4.
 **Resolution:** Add `HirStmt::If` / `HirExpr::If` (block-expression form), parser productions, and Cranelift multi-block emission.
 
+### I-020 — `inst_values` memoizer will break under multi-block control flow
+**Files:** `src/codegen.rs` (`inst_values: HashMap<InstRef, Value>`)
+**Summary:** Codegen lazily memoizes Cranelift `Value`s keyed by `InstRef`. This is sound today because every function has a single `entry_block` and UIR is tree-shaped. Once `if`/`loop` (I-003) introduce multiple basic blocks, an `InstRef` evaluated in one block and re-used from another will trigger Cranelift dominator errors: the memoized `Value` was emitted into a block that does not dominate the consumer.
+**Resolution:** Before control flow lands, switch to per-block eager evaluation (likely via a TIR pass that anchors each instruction to its parent block, as gestured at in the docs). Drop the cross-block memoization, or scope it to the current block only and re-materialize / phi-merge across block boundaries.
+
 ### I-004 — String type is a raw pointer with no length
 **Files:** `src/codegen.rs` (`HirExprKind::StrLiteral`, `generate_print_call`)
 **Summary:** `StrLiteral` codegen returns a bare `global_value` pointer. There is no length, no slice ABI, no ownership metadata. `print()` works only on string literals because it grabs the length from the AST node, not from the runtime value. Any non-literal string operation will require a fat-pointer (`*u8, usize`) ABI decision.
@@ -102,6 +107,18 @@ Resolved entries are removed (not kept around as a changelog). Look at `git log`
 **Files:** `src/types.rs` (`tuple_elements_vec`)
 **Summary:** The accessor copies the element-id slice out of `extra` rather than returning a borrowed view, because `TypeId` is not `#[repr(transparent)]` over `u32` and the unsafe transmute to `&[TypeId]` would be UB without it. Today the function is called only by `Display` for diagnostics and by tests; not a hot path.
 **Resolution:** Tag `TypeId` with `#[repr(transparent)]` and expose `tuple_elements(id) -> &[TypeId]` alongside the copying accessor. Migrate non-perf-critical callers to it lazily. Defer until tuple codegen lands and the accessor shows up in a profile.
+
+---
+
+### I-021 — `bool` lowered as `types::I8` will mis-ABI across FFI boundaries
+**Files:** `src/codegen.rs` (`cranelift_type_for`)
+**Summary:** `TypeKind::Bool` maps to Cranelift `I8`. Fine for internal logic, but C ABIs typically pass `_Bool` zero/sign-extended to a full register (often i32 on SysV, register-width on Win64). Passing or returning our raw `I8` across an FFI call would leave the upper bits undefined from the callee's perspective.
+**Resolution:** When FFI lands, insert explicit `uext` (zero-extension) on bool arguments at call sites and `ireduce` on bool returns, per the target ABI. Decide at the FFI design stage whether `bool` keeps its `I8` storage type and only widens at the boundary, or becomes register-width throughout. Latent until FFI exists.
+
+### I-022 — String equality not implemented
+**Files:** `src/sema.rs` (`check_binary_op`)
+**Summary:** `==` / `!=` on `str` is rejected with `"not supported for type 'str' (yet)"`. Blocked on I-004: with strings represented as bare pointers, there is no length to compare against. Fixing this requires the fat-pointer ABI from I-004 plus a `memcmp` libcall (or an inlined byte-compare loop) at codegen.
+**Resolution:** After I-004 lands the `(*u8, usize)` slice ABI, implement `==`/`!=` in codegen as length-check + `memcmp`. Sema just needs the rejection removed.
 
 ---
 
