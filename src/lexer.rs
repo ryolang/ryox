@@ -474,4 +474,19 @@ mod tests {
         let tokens = tokenize("x == 1");
         assert_eq!(tokens[1], Token::EqEq);
     }
+
+    #[test]
+    fn tokenize_equality_operators_without_surrounding_whitespace() {
+        let tokens = tokenize("x==1");
+        assert_eq!(
+            tokens,
+            vec![Token::Ident("x"), Token::EqEq, Token::Int("1")]
+        );
+
+        let tokens = tokenize("x!=y");
+        assert_eq!(
+            tokens,
+            vec![Token::Ident("x"), Token::NotEq, Token::Ident("y")]
+        );
+    }
 }
