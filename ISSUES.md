@@ -2,8 +2,6 @@
 
 Compiler issues identified during source review. Each entry is independently actionable; severity reflects impact on correctness, future feature work, or code health — not user impact today (the compiler is pre-alpha).
 
-For the two largest items (interned types, lower/sema split), see the dedicated plan in [docs/dev/middle_end_refactor.md](docs/dev/middle_end_refactor.md). They are summarized here for completeness but tracked there.
-
 ---
 
 ## Severity Legend
@@ -14,32 +12,12 @@ For the two largest items (interned types, lower/sema split), see the dedicated 
 
 ---
 
-## ✅ Resolved
-
-### I-001 — `hir::Type` is a 3-variant enum with no interning ✅
-**Files:** `src/hir.rs`, `src/types.rs`, `src/codegen.rs`, `src/builtins.rs`
-**Resolved by:** Phase 1 of [middle_end_refactor.md](docs/dev/middle_end_refactor.md). `hir::Type` removed; `TypeId` and `InternPool` live in `src/types.rs`; every consumer routes through the pool. `TypeKind` reserves slots for future structs/enums/tuples/option/error-union/function types so they land additively.
-
-### I-002 — `lower.rs` fuses structural lowering and semantic analysis ✅
-**Files:** `src/ast_lower.rs`, `src/sema.rs` (formerly `src/lower.rs`)
-**Resolved by:** Phase 2 of [middle_end_refactor.md](docs/dev/middle_end_refactor.md). `lower.rs` deleted; `ast_lower` handles pure AST→HIR structural translation (leaves `HirExpr.ty = None`), `sema` owns scope, type resolution, function signatures, and type-mismatch diagnostics.
-
-### I-007 — Binary operators always produce `Int` ✅
-**Files:** `src/sema.rs`
-**Resolved by:** The sema extraction. `analyze_expr` for `BinaryOp` rejects mismatched operand types, restricts arithmetic operators to `Int`, allows equality on `Int`/`Bool` only (producing `Bool`), and explicitly rejects `Str`/`Void` equality. Covered by `sema::tests::mixed_type_equality_rejected`, `bool_arithmetic_rejected`, `string_equality_rejected`.
-
-### I-014 — `print` rejects non-literal arguments with a confusing error ✅
-**Files:** `src/sema.rs`, `src/codegen.rs`
-**Resolved by:** Lifting the arity and string-literal checks out of `codegen::generate_print_call` and into `sema::check_builtin_call`. The codegen path now `debug_assert!`s the invariants sema guarantees. Final fix remains tracked under I-006 (move `print` to a runtime crate).
-
----
-
 ## 🔴 Blocking
 
 ### I-003 — No control flow in the compiler
 **Files:** `src/lexer.rs`, `src/parser.rs`, `src/hir.rs`, `src/codegen.rs`
 **Summary:** `if`/`else`/`match` are lexed as keywords but have no parser, no HIR variants, and no codegen support (no block branching or phi handling). This is the single largest blocker for advancing past Milestone 4.
-**Resolution:** Add `HirStmt::If` / `HirExpr::If` (block-expression form), parser productions, and Cranelift multi-block emission. Should land **after** the middle-end refactor so the new HIR shape doesn't have to be rewritten.
+**Resolution:** Add `HirStmt::If` / `HirExpr::If` (block-expression form), parser productions, and Cranelift multi-block emission.
 
 ### I-004 — String type is a raw pointer with no length
 **Files:** `src/codegen.rs` (`HirExprKind::StrLiteral`, `generate_print_call`)
@@ -51,18 +29,18 @@ For the two largest items (interned types, lower/sema split), see the dedicated 
 ## 🟡 Correctness / Hygiene
 
 ### I-005 — `mut` is parsed but never enforced
-**Files:** `src/hir.rs` (`HirStmt::VarDecl.mutable`), `src/lower.rs`
+**Files:** `src/hir.rs` (`HirStmt::VarDecl.mutable`), `src/sema.rs`
 **Summary:** `HirStmt::VarDecl` carries `mutable: bool`, but no pass reads it. The README advertises immutable-by-default semantics. Reassignment isn't parsed yet, so the bug is latent — but the invariant should be checked in sema as soon as assignment lands.
 **Resolution:** When assignment is added to the parser, sema must reject reassignment to non-`mut` bindings.
 
 ### I-006 — `print` is special-cased in codegen
-**Files:** `src/codegen.rs` (`generate_print_call`)
-**Summary:** Codegen emits a raw `write(2)` syscall wrapper inline for the `print` builtin. Consequences:
+**Files:** `src/codegen.rs` (`generate_print_call`), `src/sema.rs` (`check_builtin_call`)
+**Summary:** Codegen emits a raw `write(2)` syscall wrapper inline for the `print` builtin, and sema has a builtin-specific validator hook to match. Consequences:
 - Rejects `print(some_var)` even when the variable is a string.
 - No formatting, no automatic newline.
 - Already stubbed out on Windows (`return Err(...)`).
 - Mixes runtime concerns into the compiler.
-**Resolution:** Move `print` to a runtime crate (`ryort` or similar) compiled to an object file and linked in via `zig cc`. Codegen emits a normal call.
+**Resolution:** Move `print` to a runtime crate (`ryort` or similar) compiled to an object file and linked in via `zig cc`. Codegen emits a normal call; `sema::check_builtin_call` goes away.
 
 ### I-008 — `Token<'a>` borrowed from source string complicates threading
 **Files:** `src/lexer.rs` (`leak_token`)
@@ -102,6 +80,5 @@ For the two largest items (interned types, lower/sema split), see the dedicated 
 
 ## Cross-References
 
-- Implementation plan for I-001 and I-002: [docs/dev/middle_end_refactor.md](docs/dev/middle_end_refactor.md)
 - Roadmap: [docs/dev/implementation_roadmap.md](docs/dev/implementation_roadmap.md)
 - Spec: [docs/specification.md](docs/specification.md)
