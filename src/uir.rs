@@ -59,31 +59,49 @@ pub type Span = SimpleSpan;
 
 // ---------- InstRef ----------
 
-/// 1-based index into [`Uir::instructions`].
+/// Index into [`Uir::instructions`].
 ///
-/// Stored as `NonZeroU32` so `Option<InstRef>` fits in 32 bits via
-/// niche-filling. Slot 0 of `instructions` is reserved as an
-/// unreachable sentinel; valid refs are `1..=instructions.len()-1`.
+/// The wrapped `NonZeroU32` *is* the array index directly: slot 0
+/// of `instructions` is reserved as an unreachable sentinel, so
+/// every valid ref lands in `1..instructions.len()`. The
+/// niche-filled representation makes `Option<InstRef>` a single
+/// 32-bit slot.
+///
+/// Both [`Self::index`] (returning `usize`) and [`Self::raw`]
+/// (returning `u32`) hand back the stored value unchanged. There
+/// is no "0-based vs 1-based" translation: pick "slot 0 is the
+/// sentinel" and the question doesn't arise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct InstRef(NonZeroU32);
 
 impl InstRef {
-    /// Convert from a 0-based index. Caller guarantees `idx >= 1`.
+    /// Convert from a `usize` array index. Caller guarantees `idx`
+    /// is in `1..instructions.len()` (slot 0 is reserved).
+    ///
+    /// Panics if `idx` is zero or exceeds `u32::MAX` — a UIR with
+    /// more than `u32::MAX` instructions cannot be addressed by
+    /// `InstRef` and is rejected here rather than silently
+    /// truncated.
     fn from_index(idx: usize) -> Self {
-        InstRef(NonZeroU32::new(idx as u32).expect("InstRef index must be >= 1"))
+        let raw = u32::try_from(idx).expect("InstRef index out of range (>= 2^32)");
+        InstRef(NonZeroU32::new(raw).expect("InstRef index must be >= 1"))
     }
 
-    /// 0-based index back into the `instructions` array.
+    /// Array index into `instructions`. Equal to [`Self::raw`] cast
+    /// to `usize`.
     pub fn index(self) -> usize {
         self.0.get() as usize
     }
 
-    /// Raw `u32` for serialization into the `extra` arena.
+    /// Stored handle as `u32`, for serialization into the `extra`
+    /// arena. Equal to [`Self::index`] cast to `u32`.
     pub fn raw(self) -> u32 {
         self.0.get()
     }
 
-    /// Reconstruct from a raw `u32` previously produced by [`Self::raw`].
+    /// Reconstruct from a raw `u32` previously produced by
+    /// [`Self::raw`]. Panics on `0` (would alias the reserved
+    /// sentinel slot).
     pub fn from_raw(raw: u32) -> Self {
         InstRef(NonZeroU32::new(raw).expect("InstRef raw must be non-zero"))
     }
@@ -381,15 +399,31 @@ impl UirBuilder {
         self.push(InstTag::ReturnVoid, InstData::None, span)
     }
 
+    /// Current `extra.len()` as a checked `u32`. The `extra` arena
+    /// is addressed by `u32` offsets in [`ExtraRange`]; a UIR that
+    /// outgrows `u32::MAX` words of payload cannot be encoded and
+    /// is rejected here rather than silently truncated. Mirrors the
+    /// overflow handling in `InternPool::intern_str` /
+    /// `InternPool::tuple`.
+    fn extra_offset(&self) -> u32 {
+        u32::try_from(self.uir.extra.len()).expect("UIR extra arena exceeded u32::MAX words")
+    }
+
+    /// Convert a length-shaped `usize` (e.g. `args.len()`) to `u32`.
+    /// Panics on overflow for the same reason as [`Self::extra_offset`].
+    fn len_u32(len: usize) -> u32 {
+        u32::try_from(len).expect("UIR list length exceeded u32::MAX")
+    }
+
     /// Emits a `Call` with name and arg list packed into `extra`.
     pub fn call(&mut self, name: StringId, args: &[InstRef], span: Span) -> InstRef {
-        let offset = self.uir.extra.len() as u32;
+        let offset = self.extra_offset();
         self.uir.extra.push(name.raw());
-        self.uir.extra.push(args.len() as u32);
+        self.uir.extra.push(Self::len_u32(args.len()));
         for arg in args {
             self.uir.extra.push(arg.raw());
         }
-        let len = call_extra::ARGS as u32 + args.len() as u32;
+        let len = Self::len_u32(call_extra::ARGS + args.len());
         self.push(
             InstTag::Call,
             InstData::Extra(ExtraRange { offset, len }),
@@ -407,7 +441,7 @@ impl UirBuilder {
         initializer: InstRef,
         span: Span,
     ) -> InstRef {
-        let offset = self.uir.extra.len() as u32;
+        let offset = self.extra_offset();
         self.uir.extra.push(name.raw());
         self.uir.extra.push(if mutable {
             var_decl_extra::FLAG_MUTABLE
@@ -423,7 +457,7 @@ impl UirBuilder {
             InstTag::VarDecl,
             InstData::Extra(ExtraRange {
                 offset,
-                len: var_decl_extra::LEN as u32,
+                len: Self::len_u32(var_decl_extra::LEN),
             }),
             span,
         )
@@ -439,11 +473,11 @@ impl UirBuilder {
         stmts: &[InstRef],
         span: Span,
     ) {
-        let offset = self.uir.extra.len() as u32;
+        let offset = self.extra_offset();
         for r in stmts {
             self.uir.extra.push(r.raw());
         }
-        let len = stmts.len() as u32;
+        let len = Self::len_u32(stmts.len());
         self.uir.func_bodies.push(FuncBody {
             name,
             params,

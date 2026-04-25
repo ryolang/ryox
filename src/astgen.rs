@@ -1,25 +1,22 @@
 //! AST → UIR structural translation.
 //!
-//! Renamed from `ast_lower` for symmetry with Zig's `AstGen.zig` —
-//! the responsibility (lowering an AST into the first IR) is the
-//! same. Pure structural translation: resolves syntactic type
-//! annotations (`int`/`bool`/`str`) to `TypeId` because those come
-//! from `TypeExpr` nodes and have no useful "no types yet"
-//! representation. No types are attached to instructions — those are
-//! filled in by sema in a later pass (Phase 3 stores them in a
-//! sidecar; Phase 4 emits TIR).
+//! Named for symmetry with Zig's `AstGen.zig` — the responsibility
+//! (lowering an AST into the first IR) is the same. Pure
+//! structural translation: resolves syntactic type annotations
+//! (`int`/`bool`/`str`) to `TypeId` because those come from
+//! `TypeExpr` nodes and have no useful "no types yet"
+//! representation. No types are attached to instructions — those
+//! are filled in by sema in a later pass (the per-`InstRef`
+//! `TypeTable`; Phase 4 will emit TIR instead).
 //!
 //! Identifier names come pre-interned as `StringId` from the parser,
 //! so this stage is allocation-light: it copies handles around.
 //!
-//! ## Two outputs during the transition
+//! ## Output
 //!
-//! [`generate`] returns the canonical [`Uir`]. While sema and codegen
-//! still consume HIR (commits 3 and 4 of the Phase 3 plan replace
-//! them), the driver also calls [`uir_to_hir`] to reconstruct an
-//! equivalent [`HirProgram`]. That shim is the only thing keeping
-//! the pipeline working end-to-end during the cutover; commit 5
-//! deletes it together with `src/hir.rs`.
+//! [`generate`] returns the canonical [`Uir`]. The pipeline driver
+//! threads it directly into `sema::analyze` and from there into
+//! `codegen::compile`; there is no intermediate tree-shaped IR.
 
 use crate::ast;
 use crate::diag::{Diag, DiagCode, DiagSink};

@@ -7,7 +7,8 @@ use crate::lexer::{self, Token};
 use crate::linker;
 use crate::parser::program_parser;
 use crate::sema;
-use crate::types::{InternPool, TypeId};
+use crate::sema::TypeTable;
+use crate::types::InternPool;
 use crate::uir::Uir;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use chumsky::span::Span as _;
@@ -248,7 +249,7 @@ fn lower_and_analyze(
     pool: &mut InternPool,
     input: &str,
     source_name: &str,
-) -> Result<(Uir, Vec<Option<TypeId>>), CompilerError> {
+) -> Result<(Uir, TypeTable), CompilerError> {
     let mut sink = DiagSink::new();
     // Phase 3 commit 4: astgen emits UIR; sema consumes UIR and
     // returns a per-instruction `TypeTable`; codegen consumes
@@ -271,7 +272,7 @@ fn lower_and_analyze(
 
 fn generate_and_display_ir(
     uir: &Uir,
-    types: &[Option<TypeId>],
+    types: &TypeTable,
     pool: &InternPool,
 ) -> Result<(), CompilerError> {
     let target = Triple::host();

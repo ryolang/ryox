@@ -1,7 +1,7 @@
 //! Cranelift codegen over UIR.
 //!
 //! Phase 3 commit 4: codegen consumes the flat [`Uir`] produced by
-//! `astgen` plus the [`TypeTable`] produced by `sema`. The HIR is
+//! `astgen` plus the [`crate::sema::TypeTable`] produced by `sema`. The HIR is
 //! gone from this module; commit 5 deletes `src/hir.rs` outright.
 //!
 //! Traversal is *index-driven* — every operand is reached through
@@ -32,12 +32,13 @@ use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::collections::HashMap;
 use target_lexicon::Triple;
 
-/// Per-instruction resolved-type table produced by `sema::analyze`.
-/// Re-exported here so codegen and the pipeline driver can share
-/// the same type alias without an extra `use` line.
-pub type TypeTable = [Option<TypeId>];
+// Codegen takes the resolved-type side-table as `&[Option<TypeId>]`
+// (the borrowed view of [`crate::sema::TypeTable`]). The owned
+// alias lives in `sema` because that's where the table is built;
+// codegen only ever reads it.
 
 /// Map a UIR/sema type to the corresponding Cranelift IR type.
+///
 ///
 /// `Int` uses the target's pointer-sized integer (i64 on 64-bit).
 /// `Bool` uses I8 (matches Cranelift's `icmp` result width and Rust's bool layout).
@@ -88,7 +89,7 @@ struct FunctionContext<'a, M: Module> {
     triple: &'a Triple,
     pool: &'a InternPool,
     uir: &'a Uir,
-    types: &'a TypeTable,
+    types: &'a [Option<TypeId>],
     locals: HashMap<StringId, Variable>,
     func_ids: &'a HashMap<StringId, FuncId>,
     /// `InstRef → Value` memo. Materializing the same instruction
@@ -175,7 +176,7 @@ impl<M: Module> Codegen<M> {
     pub fn compile(
         &mut self,
         uir: &Uir,
-        types: &TypeTable,
+        types: &[Option<TypeId>],
         pool: &InternPool,
     ) -> Result<FuncId, String> {
         debug_assert!(
@@ -205,7 +206,7 @@ impl<M: Module> Codegen<M> {
     pub fn compile_and_dump_ir(
         &mut self,
         uir: &Uir,
-        types: &TypeTable,
+        types: &[Option<TypeId>],
         pool: &InternPool,
     ) -> Result<String, String> {
         debug_assert!(
@@ -265,7 +266,7 @@ impl<M: Module> Codegen<M> {
         &mut self,
         body: &FuncBody,
         uir: &Uir,
-        types: &TypeTable,
+        types: &[Option<TypeId>],
         func_ids: &HashMap<StringId, FuncId>,
         pool: &InternPool,
     ) -> Result<Option<String>, String> {
@@ -620,14 +621,15 @@ fn store_string<M: Module>(
 /// resolved type. Used inside `debug_assert!` at codegen entry
 /// points; sema is expected to have filled the table before codegen
 /// runs.
-fn all_types_resolved(uir: &Uir, types: &TypeTable) -> bool {
+fn all_types_resolved(uir: &Uir, types: &[Option<TypeId>]) -> bool {
     if types.len() != uir.instructions.len() {
         return false;
     }
     // Slot 0 is the reserved sentinel; legitimately `None`.
+    let mut visited = vec![false; uir.instructions.len()];
     for body in &uir.func_bodies {
         for stmt_ref in uir.body_stmts(body) {
-            if !walk_typed(uir, types, stmt_ref) {
+            if !walk_typed(uir, types, stmt_ref, &mut visited) {
                 return false;
             }
         }
@@ -635,7 +637,18 @@ fn all_types_resolved(uir: &Uir, types: &TypeTable) -> bool {
     true
 }
 
-fn walk_typed(uir: &Uir, types: &TypeTable, r: InstRef) -> bool {
+/// Recursive type-presence walk over operands, memoized in
+/// `visited` so a DAG-shaped UIR can't trigger exponential
+/// re-traversal. Today UIR is tree-shaped (one parent per inst) so
+/// the memo is purely defensive — but it's the right invariant
+/// before TIR / lazy sema land, and matches `Codegen::eval_inst`'s
+/// `inst_values` memo (Zig's `Air.Liveness` analogue in
+/// `src/Air.zig`).
+fn walk_typed(uir: &Uir, types: &[Option<TypeId>], r: InstRef, visited: &mut [bool]) -> bool {
+    if visited[r.index()] {
+        return true;
+    }
+    visited[r.index()] = true;
     if types[r.index()].is_none() {
         return false;
     }
@@ -646,16 +659,25 @@ fn walk_typed(uir: &Uir, types: &TypeTable, r: InstRef) -> bool {
         | InstData::Str(_)
         | InstData::Bool(_)
         | InstData::Var(_) => true,
-        InstData::UnOp(o) => walk_typed(uir, types, o),
-        InstData::BinOp { lhs, rhs } => walk_typed(uir, types, lhs) && walk_typed(uir, types, rhs),
+        InstData::UnOp(o) => walk_typed(uir, types, o, visited),
+        InstData::BinOp { lhs, rhs } => {
+            walk_typed(uir, types, lhs, visited) && walk_typed(uir, types, rhs, visited)
+        }
         InstData::Extra(_) => match inst.tag {
             InstTag::Call => uir
                 .call_view(r)
                 .args
                 .iter()
-                .all(|a| walk_typed(uir, types, *a)),
-            InstTag::VarDecl => walk_typed(uir, types, uir.var_decl_view(r).initializer),
-            _ => true,
+                .all(|a| walk_typed(uir, types, *a, visited)),
+            InstTag::VarDecl => walk_typed(uir, types, uir.var_decl_view(r).initializer, visited),
+            // Any newly-introduced `Extra`-bearing tag must wire
+            // its operand walking explicitly. Silently accepting
+            // "true" here would let codegen miss unresolved types
+            // in those operands.
+            other => unreachable!(
+                "walk_typed: Extra-bearing InstTag {:?} has no operand-walk arm",
+                other
+            ),
         },
     }
 }

@@ -1,25 +1,19 @@
 //! Semantic analysis: scope + type resolution over UIR.
 //!
-//! Phase 3 commit 3: sema consumes the flat [`Uir`] produced by
-//! `astgen` and writes resolved types into a sidecar
-//! `Vec<Option<TypeId>>` indexed by [`InstRef`]. The HIR is no
-//! longer the input to sema.
-//!
-//! The "fully typed HIR for codegen" intermediate step still exists
-//! during the cutover — `pipeline.rs` calls
-//! [`astgen::uir_to_hir_typed`] with the side-table this module
-//! returns, so codegen sees the same `HirProgram` it always has. The
-//! tree-shaped HIR and the conversion both die in commit 4 (codegen
-//! consumes UIR directly) and commit 5 (`hir.rs` deleted).
+//! Sema consumes the flat [`Uir`] produced by `astgen` and writes
+//! resolved types into a sidecar [`TypeTable`] (`Vec<Option<TypeId>>`)
+//! indexed by [`InstRef`]. `pipeline.rs` hands the same
+//! `(uir, types)` pair straight to `codegen::compile` — there is no
+//! intermediate tree-shaped IR.
 //!
 //! Why a sidecar rather than mutating instructions in place: UIR is
 //! an immutable structural snapshot from astgen. Adding a typed slot
 //! to every `Inst` would either (a) mutate UIR — breaking the "input
 //! to sema is read-only" invariant we'll need for incremental and
 //! comptime — or (b) require copying the whole stream. The
-//! `Vec<Option<TypeId>>` is the deliberate interim shape from
-//! pipeline_alignment.md §3.3; commit 4 (Phase 4) replaces it with
-//! freshly emitted TIR.
+//! `TypeTable` is the deliberate interim shape from
+//! pipeline_alignment.md §3.3; Phase 4 replaces it with freshly
+//! emitted TIR.
 //!
 //! Errors are accumulated through a [`DiagSink`] so analysis can
 //! continue past the first problem and surface several in one run. A
