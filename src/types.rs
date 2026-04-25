@@ -134,13 +134,29 @@ pub struct InternPool {
     string_bytes: Vec<u8>,
     /// `(offset, len)` into `string_bytes`, indexed by `StringId`.
     strings: Vec<(u32, u32)>,
+    /// Dedup table for `intern_str`. Stores the bytes a second time
+    /// as `String` keys: a known cost (≈ `string_bytes.len()`) we
+    /// accept on stable Rust because `HashMap::raw_entry_mut` (which
+    /// would let us key on `StringId` while hashing/comparing via
+    /// the arena view of `string_bytes`) is still nightly-only.
+    /// TODO: drop the duplicate keys once `raw_entry_mut` stabilises
+    /// or once we take a direct `hashbrown` dependency.
     string_dedup: HashMap<String, StringId>,
 }
 
 /// Dedup key for variable-payload types. Primitives don't appear
 /// here — they live at fixed item indices and are looked up
-/// directly. Keying on the `extra` content (rather than on a
-/// `Box<[TypeId]>`) avoids per-intern allocations.
+/// directly.
+///
+/// `Vec<TypeId>` here means `tuple()` allocates a fresh `Vec` on
+/// every probe (the `to_vec()` call) before the dedup table is
+/// consulted. That's a per-call alloc the original comment
+/// understated. The fix is the same nightly-`raw_entry`/`hashbrown`
+/// shape needed for `string_dedup`: a borrow-keyed lookup that can
+/// hash and compare a `&[TypeId]` slice directly. Until then,
+/// tuple types are interned only from sema's reserved arms (no
+/// user syntax constructs them yet) so the per-call alloc is paid
+/// at most a handful of times across a compile.
 #[derive(PartialEq, Eq, Hash, Debug)]
 enum TypeKey {
     Tuple(Vec<TypeId>),
@@ -250,8 +266,14 @@ impl InternPool {
     /// Returns by value rather than by `&[TypeId]` because element
     /// ids are stored as raw `u32`s in the `extra` arena;
     /// reinterpreting that as `&[TypeId]` would require
-    /// `repr(transparent)` plus unsafe transmute, and tuple codegen
-    /// isn't on the hot path yet. Revisit when it is.
+    /// `repr(transparent)` on `TypeId` plus an unsafe transmute.
+    ///
+    /// TODO: when tuple codegen lands and this becomes a hot path,
+    /// flip `TypeId` to `#[repr(transparent)]` over `u32`, expose a
+    /// zero-copy `tuple_elements(id) -> &[TypeId]` view alongside
+    /// this copying accessor, and migrate non-perf-critical
+    /// callers to it. The unit-test footprint that relies on this
+    /// helper is small enough to update in lockstep.
     #[allow(dead_code)]
     pub fn tuple_elements_vec(&self, id: TypeId) -> Vec<TypeId> {
         let item = self.items[id.0 as usize];
@@ -265,6 +287,16 @@ impl InternPool {
     }
 
     // ----- String interning -----
+
+    /// Look up an already-interned string without inserting.
+    ///
+    /// Returns `None` if `s` has never been passed to `intern_str`.
+    /// Useful for read-only consumers (e.g. codegen) that need to
+    /// resolve a known name like `"main"` against the pool without
+    /// taking `&mut`.
+    pub fn find_str(&self, s: &str) -> Option<StringId> {
+        self.string_dedup.get(s).copied()
+    }
 
     pub fn intern_str(&mut self, s: &str) -> StringId {
         if let Some(&id) = self.string_dedup.get(s) {

@@ -147,14 +147,20 @@ impl<M: Module> Codegen<M> {
             self.compile_function(func, &func_ids, pool)?;
         }
 
-        // Resolve "main" through the pool. We can't intern here
-        // because pool is `&`; the front-end always interns "main"
-        // (ast_lower does it explicitly), so a `get` is enough.
-        program
-            .functions
-            .iter()
-            .find(|f| pool.str(f.name) == "main")
-            .and_then(|f| func_ids.get(&f.name).copied())
+        // Resolve "main" through the pool. `ast_lower` always
+        // interns the string "main" (it does so explicitly when
+        // synthesising implicit-main and when checking for an
+        // explicit-main collision), so the read-only `find_str`
+        // probe is guaranteed to hit if the program declares one.
+        // This avoids both the previous `pool.str(f.name) == "main"`
+        // strcmp scan over every function and any need for `&mut
+        // pool` here.
+        let main_id = pool
+            .find_str("main")
+            .ok_or_else(|| "No main function defined".to_string())?;
+        func_ids
+            .get(&main_id)
+            .copied()
             .ok_or_else(|| "No main function defined".to_string())
     }
 

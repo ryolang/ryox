@@ -297,18 +297,23 @@ fn analyze_expr(
             for arg in args.iter_mut() {
                 analyze_expr(arg, scope, signatures, pool, sink);
             }
-            let name_str = pool.str(*name);
+            // Resolve the name once: a single `pool.str` call gives
+            // us the &str needed for both the builtin lookup and
+            // the diagnostic messages, while `name_id` keeps the
+            // signature-table lookup at a `StringId` (u32) compare.
+            let name_id = *name;
+            let name_str = pool.str(name_id);
             if let Some(builtin) = builtins::lookup(name_str) {
                 check_builtin_call(name_str, args, span, sink);
                 builtin.return_type(pool)
-            } else if let Some(sig) = signatures.get(name) {
+            } else if let Some(sig) = signatures.get(&name_id) {
                 if args.len() != sig.params.len() {
                     sink.emit(Diag::error(
                         span,
                         DiagCode::ArityMismatch,
                         format!(
                             "call to '{}' has wrong arity: expected {} argument(s), got {}",
-                            pool.str(*name),
+                            name_str,
                             sig.params.len(),
                             args.len(),
                         ),
@@ -322,7 +327,7 @@ fn analyze_expr(
                                 DiagCode::TypeMismatch,
                                 format!(
                                     "call to '{}': argument {} has type '{}', expected '{}'",
-                                    pool.str(*name),
+                                    name_str,
                                     idx + 1,
                                     pool.display(actual),
                                     pool.display(expected),
@@ -336,7 +341,7 @@ fn analyze_expr(
                 sink.emit(Diag::error(
                     span,
                     DiagCode::UndefinedFunction,
-                    format!("undefined function: '{}'", pool.str(*name)),
+                    format!("undefined function: '{}'", name_str),
                 ));
                 pool.error_type()
             }

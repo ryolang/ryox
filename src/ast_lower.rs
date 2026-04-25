@@ -24,11 +24,36 @@ fn synthetic_span() -> Span {
 /// for any annotation that failed to resolve) so subsequent passes
 /// can keep type-checking and surface their own diagnostics. The
 /// driver decides whether to proceed based on `sink.has_errors()`.
+/// Pre-interned `StringId`s for the three primitive type names.
+///
+/// Phase 2 made identifiers `StringId` handles, so `resolve_type`
+/// used to call `pool.str(name)` on every type annotation just to
+/// reach the &str-keyed match. Interning the three names once at
+/// the top of `lower` lets subsequent comparisons be a `StringId`
+/// equality check (`u32` compare) instead of a `pool.str` lookup
+/// followed by a string compare.
+struct Primitives {
+    int: StringId,
+    str_: StringId,
+    bool_: StringId,
+}
+
+impl Primitives {
+    fn new(pool: &mut InternPool) -> Self {
+        Primitives {
+            int: pool.intern_str("int"),
+            str_: pool.intern_str("str"),
+            bool_: pool.intern_str("bool"),
+        }
+    }
+}
+
 pub fn lower(program: &ast::Program, pool: &mut InternPool, sink: &mut DiagSink) -> HirProgram {
     let mut func_defs: Vec<&ast::FunctionDef> = Vec::new();
     let mut top_level: Vec<&ast::Statement> = Vec::new();
 
     let main_id = pool.intern_str("main");
+    let prims = Primitives::new(pool);
 
     for stmt in &program.statements {
         match &stmt.kind {
@@ -55,44 +80,54 @@ pub fn lower(program: &ast::Program, pool: &mut InternPool, sink: &mut DiagSink)
 
     let mut functions = Vec::new();
     for func in &func_defs {
-        functions.push(lower_function_def(func, pool, sink));
+        functions.push(lower_function_def(func, &prims, pool, sink));
     }
     if !has_explicit_main {
         // Synthesize an implicit `main` from top-level statements.
         // User-defined helper functions still appear above;
         // without this, calls to them in top-level code would
         // dangle as "undefined function" errors in sema.
-        functions.push(lower_implicit_main(&top_level, main_id, pool, sink));
+        functions.push(lower_implicit_main(&top_level, main_id, &prims, pool, sink));
     }
 
     HirProgram { functions }
 }
 
-fn resolve_type(name: StringId, span: Span, pool: &InternPool, sink: &mut DiagSink) -> TypeId {
-    match pool.str(name) {
-        "int" => pool.int(),
-        "str" => pool.str_(),
-        "bool" => pool.bool_(),
-        other => {
-            sink.emit(Diag::error(
-                span,
-                DiagCode::UnknownType,
-                format!("unknown type: '{}'", other),
-            ));
-            pool.error_type()
-        }
+fn resolve_type(
+    name: StringId,
+    span: Span,
+    prims: &Primitives,
+    pool: &InternPool,
+    sink: &mut DiagSink,
+) -> TypeId {
+    if name == prims.int {
+        pool.int()
+    } else if name == prims.str_ {
+        pool.str_()
+    } else if name == prims.bool_ {
+        pool.bool_()
+    } else {
+        // Only resolve the &str on the unhappy path; the common
+        // primitive path stays a pure `StringId` compare.
+        sink.emit(Diag::error(
+            span,
+            DiagCode::UnknownType,
+            format!("unknown type: '{}'", pool.str(name)),
+        ));
+        pool.error_type()
     }
 }
 
 fn lower_implicit_main(
     stmts: &[&ast::Statement],
     main_id: StringId,
+    prims: &Primitives,
     pool: &mut InternPool,
     sink: &mut DiagSink,
 ) -> HirFunction {
     let mut body = Vec::new();
     for stmt in stmts {
-        lower_stmt(stmt, pool, sink, &mut body);
+        lower_stmt(stmt, prims, pool, sink, &mut body);
     }
 
     let int_ty = pool.int();
@@ -115,6 +150,7 @@ fn lower_implicit_main(
 
 fn lower_function_def(
     func: &ast::FunctionDef,
+    prims: &Primitives,
     pool: &mut InternPool,
     sink: &mut DiagSink,
 ) -> HirFunction {
@@ -123,18 +159,24 @@ fn lower_function_def(
         .iter()
         .map(|p| HirParam {
             name: p.name.name,
-            ty: resolve_type(p.type_annotation.name, p.type_annotation.span, pool, sink),
+            ty: resolve_type(
+                p.type_annotation.name,
+                p.type_annotation.span,
+                prims,
+                pool,
+                sink,
+            ),
         })
         .collect();
 
     let return_type = match &func.return_type {
-        Some(ty) => resolve_type(ty.name, ty.span, pool, sink),
+        Some(ty) => resolve_type(ty.name, ty.span, prims, pool, sink),
         None => pool.void(),
     };
 
     let mut body = Vec::new();
     for stmt in &func.body {
-        lower_stmt(stmt, pool, sink, &mut body);
+        lower_stmt(stmt, prims, pool, sink, &mut body);
     }
 
     HirFunction {
@@ -147,6 +189,7 @@ fn lower_function_def(
 
 fn lower_stmt(
     stmt: &ast::Statement,
+    prims: &Primitives,
     pool: &mut InternPool,
     sink: &mut DiagSink,
     out: &mut Vec<HirStmt>,
@@ -157,7 +200,7 @@ fn lower_stmt(
             let ty = decl
                 .type_annotation
                 .as_ref()
-                .map(|ann| resolve_type(ann.name, ann.span, pool, sink));
+                .map(|ann| resolve_type(ann.name, ann.span, prims, pool, sink));
             out.push(HirStmt::VarDecl {
                 name: decl.name.name,
                 mutable: decl.mutable,

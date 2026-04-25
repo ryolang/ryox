@@ -229,8 +229,17 @@ pub fn lex(input: &str, pool: &mut InternPool) -> Result<Vec<(Token, Span)>, Lex
         })
         .collect();
 
+    // TODO: have `indent::process` return a span/offset for the
+    // offending newline so we can point Ariadne at the exact line.
+    // For now, anchor on the last raw token's span (which is at
+    // least *near* where the indent went wrong) and fall back to
+    // 0..0 only for the empty-input case.
+    let fallback_span = raw_tokens
+        .last()
+        .map(|(_, s)| *s)
+        .unwrap_or_else(|| SimpleSpan::new((), 0..0));
     let processed = crate::indent::process(raw_tokens).map_err(|e| LexError {
-        span: SimpleSpan::new((), 0..0),
+        span: fallback_span,
         message: e,
     })?;
 
@@ -242,6 +251,15 @@ pub fn lex(input: &str, pool: &mut InternPool) -> Result<Vec<(Token, Span)>, Lex
     Ok(out)
 }
 
+/// Decode standard escape sequences in a string-literal body.
+///
+/// TODO(phase-3): unknown escape sequences are silently preserved
+/// (e.g. `\q` becomes the two characters `\` and `q`). Once the
+/// pipeline-alignment Phase 1 work integrates with the lexer, emit
+/// a structured `Diag` through a `DiagSink` here instead so the
+/// user sees `unknown escape sequence '\q'` with a span pointing
+/// at the offending byte. Matches the same gap noted at the
+/// `LexError` definition.
 fn unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -255,9 +273,9 @@ fn unescape(s: &str) -> String {
                 Some('"') => out.push('"'),
                 Some('0') => out.push('\0'),
                 Some(c) => {
-                    // Unknown escape: preserve the backslash and the
-                    // following character verbatim. Matches the
-                    // pre-Phase-2 parser-side behaviour.
+                    // Unknown escape: preserve the backslash and
+                    // the following character verbatim. See TODO
+                    // above — this should become a diagnostic.
                     out.push('\\');
                     out.push(c);
                 }
@@ -273,6 +291,15 @@ fn unescape(s: &str) -> String {
 fn intern_token(raw: RawToken<'_>, span: Span, pool: &mut InternPool) -> Result<Token, LexError> {
     Ok(match raw {
         RawToken::Error => Token::Error,
+        // Integer literals are parsed as `i64` here. This is a
+        // documented limitation: the smallest `i64` value
+        // (`-9_223_372_036_854_775_808`) is unrepresentable as a
+        // positive integer literal because we resolve sign at
+        // parse time via the unary `-` operator on top of a
+        // positive token. Phase 3+ should switch to `u64`-with-
+        // late-negation (or add an `IntLitMin` token variant) so
+        // the literal can be spelled. Tracked alongside the
+        // numeric-tower work in the roadmap.
         RawToken::Int(s) => match s.parse::<i64>() {
             Ok(n) => Token::IntLit(n),
             Err(_) => {
@@ -324,7 +351,13 @@ fn intern_token(raw: RawToken<'_>, span: Span, pool: &mut InternPool) -> Result<
         RawToken::Indent => Token::Indent,
         RawToken::Dedent => Token::Dedent,
 
-        RawToken::Comment | RawToken::Whitespace => Token::Error,
+        RawToken::Comment | RawToken::Whitespace => {
+            // These variants are tagged `logos::skip` on `RawToken`
+            // and never appear in the iterator output. If logos is
+            // ever reconfigured to surface them, fail loudly so we
+            // notice rather than silently producing `Token::Error`.
+            unreachable!("logos::skip variants never reach intern_token")
+        }
     })
 }
 

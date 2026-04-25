@@ -31,19 +31,22 @@ fn get_output_filenames(input_file: &Path) -> (String, String) {
 
 pub(crate) fn lex_command(file: &Path) -> Result<(), CompilerError> {
     let input = read_source_file(file)?;
-    display_tokens(&input, file);
-    Ok(())
+    display_tokens(&input, file)
 }
 
-fn display_tokens(input: &str, file: &Path) {
+fn display_tokens(input: &str, file: &Path) -> Result<(), CompilerError> {
     let mut pool = InternPool::new();
-    let tokens = match lexer::lex(input, &mut pool) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Lex error: {}", e.message);
-            return;
-        }
-    };
+    let tokens = lexer::lex(input, &mut pool).map_err(|e| {
+        // Route lex failures through the same Diag pipeline as
+        // parse / sema errors so `ryo lex` matches the rest of the
+        // CLI's exit-code and rendering behaviour. Previously this
+        // path silently `eprintln!`d and returned `Ok(())`, which
+        // hid lex errors from CI.
+        let diag = Diag::error(e.span, DiagCode::ParseError, e.message);
+        let name = source_name(file);
+        render_diags(std::slice::from_ref(&diag), input, &name);
+        CompilerError::Diagnostics(vec![diag])
+    })?;
 
     println!("Token stream for '{}':", file.display());
     println!();
@@ -62,6 +65,7 @@ fn display_tokens(input: &str, file: &Path) {
             other => println!("{:?} @ {}..{}", other, span.start, span.end),
         }
     }
+    Ok(())
 }
 
 pub(crate) fn parse_command(file: &Path) -> Result<(), CompilerError> {

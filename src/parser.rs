@@ -561,17 +561,38 @@ mod tests {
         assert!(lex_and_parse("x = a == b == c").is_err());
     }
 
+    /// Helper for the escape-table tests: parse a single
+    /// `x = "..."` declaration and return the interned bytes of
+    /// its string literal.
+    fn parse_str_literal(src: &str) -> String {
+        let (program, pool) = lex_and_parse(src).expect("parse ok");
+        match &program.statements[0].kind {
+            StmtKind::VarDecl(decl) => match decl.initializer.kind {
+                ExprKind::Literal(Literal::Str(id)) => pool.str(id).to_string(),
+                ref other => panic!("expected Str literal, got {:?}", other),
+            },
+            other => panic!("expected VarDecl, got {:?}", other),
+        }
+    }
+
     #[test]
     fn string_literal_unescapes_at_lex_time() {
-        let (program, pool) = lex_and_parse("x = \"hello\\n\"").unwrap();
-        if let StmtKind::VarDecl(decl) = &program.statements[0].kind {
-            if let ExprKind::Literal(Literal::Str(id)) = decl.initializer.kind {
-                assert_eq!(pool.str(id), "hello\n");
-            } else {
-                panic!("expected Str literal");
-            }
-        } else {
-            panic!("expected VarDecl");
-        }
+        // Sanity check on the historical case (newline) before
+        // sweeping the rest of the escape table below.
+        assert_eq!(parse_str_literal("x = \"hello\\n\""), "hello\n");
+    }
+
+    #[test]
+    fn string_literal_decodes_full_escape_table() {
+        // Locks the escape semantics down at the lex layer so the
+        // parser can stay a pure pass-through for `Literal::Str`.
+        // If a new escape lands (or an existing one changes), it
+        // surfaces here rather than at codegen time.
+        assert_eq!(parse_str_literal(r#"x = "\n""#), "\n");
+        assert_eq!(parse_str_literal(r#"x = "\t""#), "\t");
+        assert_eq!(parse_str_literal(r#"x = "\r""#), "\r");
+        assert_eq!(parse_str_literal(r#"x = "\\""#), "\\");
+        assert_eq!(parse_str_literal(r#"x = "\"""#), "\"");
+        assert_eq!(parse_str_literal("x = \"\\0\""), "\0");
     }
 }
