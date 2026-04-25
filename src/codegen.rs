@@ -206,10 +206,8 @@ impl<M: Module> Codegen<M> {
 
         let mut ir_output = String::new();
         for tir in tirs {
-            if let Some(ir) = self.compile_function(tir, &func_ids, pool)? {
-                ir_output.push_str(&ir);
-                ir_output.push('\n');
-            }
+            ir_output.push_str(&self.compile_function(tir, &func_ids, pool)?);
+            ir_output.push('\n');
         }
 
         Ok(ir_output)
@@ -256,7 +254,7 @@ impl<M: Module> Codegen<M> {
         tir: &Tir,
         func_ids: &HashMap<StringId, FuncId>,
         pool: &InternPool,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<String, String> {
         let func_id = *func_ids
             .get(&tir.name)
             .ok_or_else(|| format!("Function '{}' not declared", pool.str(tir.name)))?;
@@ -321,7 +319,7 @@ impl<M: Module> Codegen<M> {
             .map_err(|e| format!("Failed to define function '{}': {}", pool.str(tir.name), e))?;
 
         self.ctx.clear();
-        Ok(Some(ir_text))
+        Ok(ir_text)
     }
 
     /// Emit a top-level statement instruction. Returns `true` iff
