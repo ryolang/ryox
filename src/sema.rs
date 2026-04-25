@@ -162,7 +162,7 @@ fn analyze_stmt(
         InstTag::VarDecl => {
             let view = uir.var_decl_view(r);
             let init_tir = analyze_expr(uir, view.initializer, fcx, scope, signatures, pool, sink);
-            let inferred = fcx.builder_ty(init_tir);
+            let inferred = fcx.builder.ty_of(init_tir);
             let resolved = resolve_var_decl_type(&view, inferred, uir, pool, sink);
             scope.insert(view.name, resolved);
             fcx.builder
@@ -174,7 +174,7 @@ fn analyze_stmt(
                 _ => unreachable!("Return must carry InstData::UnOp"),
             };
             let val_tir = analyze_expr(uir, operand, fcx, scope, signatures, pool, sink);
-            let actual = fcx.builder_ty(val_tir);
+            let actual = fcx.builder.ty_of(val_tir);
             if fcx.return_type == pool.void() {
                 if !pool.is_error(actual) {
                     sink.emit(Diag::error(
@@ -319,8 +319,8 @@ fn analyze_expr(
             };
             let l = analyze_expr(uir, lhs, fcx, scope, signatures, pool, sink);
             let r2 = analyze_expr(uir, rhs, fcx, scope, signatures, pool, sink);
-            let lhs_ty = fcx.builder_ty(l);
-            let rhs_ty = fcx.builder_ty(r2);
+            let lhs_ty = fcx.builder.ty_of(l);
+            let rhs_ty = fcx.builder.ty_of(r2);
             check_binary_op(inst.tag, lhs_ty, rhs_ty, l, r2, span, fcx, pool, sink)
         }
         InstTag::Neg => {
@@ -329,7 +329,7 @@ fn analyze_expr(
                 _ => unreachable!("Neg must carry InstData::UnOp"),
             };
             let sub = analyze_expr(uir, operand, fcx, scope, signatures, pool, sink);
-            let sub_ty = fcx.builder_ty(sub);
+            let sub_ty = fcx.builder.ty_of(sub);
             match pool.kind(sub_ty) {
                 TypeKind::Int => fcx.builder.unary(TirTag::INeg, pool.int(), sub, span),
                 TypeKind::Error => fcx.builder.unreachable(pool.error_type(), span),
@@ -512,7 +512,7 @@ fn check_call(
             .zip(sig.params.iter())
             .enumerate()
         {
-            let actual = fcx.builder_ty(*arg_tir);
+            let actual = fcx.builder.ty_of(*arg_tir);
             if !pool.compatible(actual, expected) {
                 sink.emit(Diag::error(
                     uir.span(*arg_uir),
@@ -565,22 +565,6 @@ fn bin_op_symbol(tag: InstTag) -> &'static str {
         InstTag::Eq => "==",
         InstTag::NotEq => "!=",
         _ => "?",
-    }
-}
-
-impl FuncCtx {
-    /// Look up the type the builder recorded for a freshly emitted
-    /// TIR ref. Equivalent to `tir.inst(r).ty` but operates on the
-    /// in-progress builder, which the finished `Tir` borrows from.
-    fn builder_ty(&self, r: TirRef) -> TypeId {
-        self.builder_inst(r).ty
-    }
-
-    fn builder_inst(&self, r: TirRef) -> &crate::tir::TypedInst {
-        // The builder's instruction arena is private; reach in via
-        // the same indexing convention the builder uses (slot 0
-        // sentinel, 1-based refs).
-        self.builder.inst_at(r.index())
     }
 }
 

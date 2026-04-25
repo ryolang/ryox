@@ -302,13 +302,13 @@ impl TirBuilder {
         }
     }
 
-    /// Read access to a freshly emitted instruction. Used by sema
-    /// to look up the type of a sub-expression it just translated
-    /// without finishing the builder. Slot 0 is the reserved
-    /// sentinel; refs into it are never produced by the public
-    /// emitters.
-    pub fn inst_at(&self, idx: usize) -> &TypedInst {
-        &self.instructions[idx]
+    /// Type of an instruction the builder has already emitted.
+    /// Sema needs this to type-check operands of sub-expressions
+    /// it just translated, before the builder is `finish`ed into a
+    /// `Tir`. Confined to type lookup so the builder's instruction
+    /// arena stays an implementation detail.
+    pub fn ty_of(&self, r: TirRef) -> TypeId {
+        self.instructions[r.index()].ty
     }
 
     fn push(&mut self, tag: TirTag, ty: TypeId, data: TirData, span: Span) -> TirRef {
