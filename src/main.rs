@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 mod ast;
-mod ast_lower;
+mod astgen;
 mod builtins;
 mod codegen;
 mod diag;

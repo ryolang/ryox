@@ -1,7 +1,8 @@
-// Commit 1 of Phase 3 lands UIR as a pure addition: nothing in the
-// pipeline consumes it yet. The `dead_code` allow falls off once
-// commit 2 (rename `ast_lower` → `astgen`) wires it in. CI runs with
-// `-Dwarnings`, so a blanket allow is necessary in the interim.
+// Astgen wires up the constructors and the call/var_decl read views.
+// The `Display` impl, decoder helpers for tags not yet emitted, and a
+// few primitive accessors will only see use once sema (commit 3) and
+// codegen (commit 4) consume UIR directly. Allow until then; CI runs
+// with `-Dwarnings`.
 #![allow(dead_code)]
 
 //! Untyped Intermediate Representation (UIR).

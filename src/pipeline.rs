@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast_lower;
+use crate::astgen;
 use crate::codegen;
 use crate::diag::{Diag, DiagCode, DiagSink, Severity};
 use crate::errors::CompilerError;
@@ -250,8 +250,13 @@ fn lower_and_analyze(
     source_name: &str,
 ) -> Result<hir::HirProgram, CompilerError> {
     let mut sink = DiagSink::new();
-    let mut hir = ast_lower::lower(program, pool, &mut sink);
-    // Run sema even if ast_lower emitted errors: the Error sentinel
+    // Phase 3 commit 2: astgen emits the canonical UIR. Sema and
+    // codegen still drive HIR, so we reconstruct one through the
+    // (temporary) `uir_to_hir` shim. The shim disappears once sema
+    // (commit 3) and codegen (commit 4) consume UIR/TIR directly.
+    let uir = astgen::generate(program, pool, &mut sink);
+    let mut hir = astgen::uir_to_hir(&uir);
+    // Run sema even if astgen emitted errors: the Error sentinel
     // keeps cascades in check, and surfacing every problem in one
     // run is the whole point of the structured-diagnostics phase.
     sema::analyze(&mut hir, pool, &mut sink);

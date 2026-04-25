@@ -147,7 +147,7 @@ impl<M: Module> Codegen<M> {
             self.compile_function(func, &func_ids, pool)?;
         }
 
-        // Resolve "main" through the pool. `ast_lower` always
+        // Resolve "main" through the pool. `astgen` always
         // interns the string "main" (it does so explicitly when
         // synthesising implicit-main and when checking for an
         // explicit-main collision), so the read-only `find_str`

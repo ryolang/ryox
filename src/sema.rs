@@ -378,7 +378,7 @@ fn check_builtin_call(name: &str, args: &[HirExpr], span: Span, sink: &mut DiagS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast_lower;
+    use crate::astgen;
     use crate::lexer::lex;
     use crate::parser::program_parser;
     use chumsky::Parser;
@@ -395,10 +395,11 @@ mod tests {
             .expect("parse ok");
 
         let mut sink = DiagSink::new();
-        let mut hir = ast_lower::lower(&program, &mut pool, &mut sink);
+        let uir = astgen::generate(&program, &mut pool, &mut sink);
         if sink.has_errors() {
             return Err(sink.into_diags());
         }
+        let mut hir = astgen::uir_to_hir(&uir);
         analyze(&mut hir, &mut pool, &mut sink);
         if sink.has_errors() {
             Err(sink.into_diags())

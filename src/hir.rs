@@ -4,7 +4,7 @@
 //! `StringId` handles into the compilation's `InternPool`. Per-stage
 //! invariants:
 //!
-//! - On exit from `ast_lower`, every `HirExpr.ty` is `None`.
+//! - On exit from `astgen::uir_to_hir`, every `HirExpr.ty` is `None`.
 //! - On exit from `sema::analyze`, every `HirExpr.ty` is `Some(...)`.
 //!   Codegen requires the latter and asserts on entry.
 
@@ -40,7 +40,7 @@ pub enum HirStmt {
     VarDecl {
         name: StringId,
         mutable: bool,
-        /// `None` after `ast_lower` when there is no annotation.
+        /// `None` after astgen when there is no annotation.
         /// Sema replaces it with `Some(inferred_from_initializer)`.
         ty: Option<TypeId>,
         initializer: HirExpr,
