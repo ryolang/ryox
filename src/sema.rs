@@ -86,13 +86,9 @@ fn analyze_stmt(
             ..
         } => {
             analyze_expr(initializer, scope, signatures, pool)?;
-            let init_ty = initializer.expect_ty();
-            // `ty` was set to pool.void() by ast_lower as a sentinel if
-            // there was no annotation. Replace it with the inferred type.
-            if *ty == pool.void() {
-                *ty = init_ty;
-            }
-            scope.insert(name.clone(), *ty);
+            let resolved = ty.unwrap_or_else(|| initializer.expect_ty());
+            *ty = Some(resolved);
+            scope.insert(name.clone(), resolved);
         }
         HirStmt::Return(Some(expr), _) => {
             analyze_expr(expr, scope, signatures, pool)?;
@@ -126,7 +122,7 @@ fn analyze_expr(
             if lhs_ty != rhs_ty {
                 return Err(format!(
                     "type mismatch in '{}': left is '{}', right is '{}'",
-                    binop_symbol(*op),
+                    op,
                     pool.display(lhs_ty),
                     pool.display(rhs_ty),
                 ));
@@ -139,13 +135,13 @@ fn analyze_expr(
                     TypeKind::Str => {
                         return Err(format!(
                             "equality operator '{}' not supported for type 'str' (yet)",
-                            binop_symbol(*op),
+                            op,
                         ));
                     }
                     TypeKind::Void => {
                         return Err(format!(
                             "equality operator '{}' not supported for type 'void'",
-                            binop_symbol(*op),
+                            op,
                         ));
                     }
                 }
@@ -155,7 +151,7 @@ fn analyze_expr(
                     _ => {
                         return Err(format!(
                             "arithmetic operator '{}' not supported for type '{}'",
-                            binop_symbol(*op),
+                            op,
                             pool.display(lhs_ty),
                         ));
                     }
@@ -182,17 +178,6 @@ fn analyze_expr(
     };
     expr.ty = Some(ty);
     Ok(())
-}
-
-fn binop_symbol(op: BinaryOp) -> &'static str {
-    match op {
-        BinaryOp::Add => "+",
-        BinaryOp::Sub => "-",
-        BinaryOp::Mul => "*",
-        BinaryOp::Div => "/",
-        BinaryOp::Eq => "==",
-        BinaryOp::NotEq => "!=",
-    }
 }
 
 #[cfg(test)]
@@ -261,7 +246,7 @@ mod tests {
         let main = &hir.functions[0];
         assert_eq!(main.return_type, pool.int());
         match &main.body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, pool.int()),
+            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.int())),
             _ => panic!(),
         }
     }
@@ -270,7 +255,7 @@ mod tests {
     fn infers_string_literal_type() {
         let (hir, pool) = run("x = \"hello\"").unwrap();
         match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, pool.str_()),
+            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.str_())),
             _ => panic!(),
         }
     }
@@ -279,7 +264,7 @@ mod tests {
     fn typed_variable_annotation_honored() {
         let (hir, pool) = run("x: int = 42").unwrap();
         match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, pool.int()),
+            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.int())),
             _ => panic!(),
         }
     }
@@ -288,7 +273,7 @@ mod tests {
     fn bool_annotation_resolves() {
         let (hir, pool) = run("x: bool = true").unwrap();
         match &hir.functions[0].body[0] {
-            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, pool.bool_()),
+            HirStmt::VarDecl { ty, .. } => assert_eq!(*ty, Some(pool.bool_())),
             _ => panic!(),
         }
     }
@@ -300,7 +285,7 @@ mod tests {
             HirStmt::VarDecl {
                 ty, initializer, ..
             } => {
-                assert_eq!(*ty, pool.int());
+                assert_eq!(*ty, Some(pool.int()));
                 assert_eq!(initializer.expect_ty(), pool.int());
                 assert!(matches!(initializer.kind, HirExprKind::Var(_)));
             }
@@ -350,7 +335,7 @@ mod tests {
             HirStmt::VarDecl {
                 ty, initializer, ..
             } => {
-                assert_eq!(*ty, pool.int());
+                assert_eq!(*ty, Some(pool.int()));
                 assert_eq!(initializer.expect_ty(), pool.int());
             }
             _ => panic!(),
@@ -364,7 +349,7 @@ mod tests {
             HirStmt::VarDecl {
                 ty, initializer, ..
             } => {
-                assert_eq!(*ty, pool.bool_());
+                assert_eq!(*ty, Some(pool.bool_()));
                 assert_eq!(initializer.expect_ty(), pool.bool_());
             }
             _ => panic!(),
@@ -396,7 +381,7 @@ mod tests {
             HirStmt::VarDecl {
                 ty, initializer, ..
             } => {
-                assert_eq!(*ty, pool.bool_());
+                assert_eq!(*ty, Some(pool.bool_()));
                 assert!(matches!(initializer.kind, HirExprKind::BoolLiteral(true)));
             }
             _ => panic!(),

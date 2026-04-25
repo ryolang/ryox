@@ -13,6 +13,7 @@
 //! change to this module instead of another rewrite of every consumer.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt;
 
 /// A compact, copyable handle to an interned type.
@@ -73,13 +74,15 @@ impl InternPool {
     }
 
     pub fn intern(&mut self, k: TypeKind) -> TypeId {
-        if let Some(&id) = self.dedup.get(&k) {
-            return id;
+        match self.dedup.entry(k) {
+            Entry::Occupied(e) => *e.get(),
+            Entry::Vacant(e) => {
+                let id = TypeId(self.kinds.len() as u32);
+                self.kinds.push(e.key().clone());
+                e.insert(id);
+                id
+            }
         }
-        let id = TypeId(self.kinds.len() as u32);
-        self.kinds.push(k.clone());
-        self.dedup.insert(k, id);
-        id
     }
 
     pub fn kind(&self, id: TypeId) -> &TypeKind {

@@ -49,7 +49,7 @@ pub fn lower(program: &ast::Program, pool: &mut InternPool) -> Result<HirProgram
     Ok(HirProgram { functions })
 }
 
-pub(crate) fn resolve_type(name: &str, pool: &InternPool) -> Result<TypeId, String> {
+fn resolve_type(name: &str, pool: &InternPool) -> Result<TypeId, String> {
     match name {
         "int" => Ok(pool.int()),
         "str" => Ok(pool.str_()),
@@ -127,13 +127,9 @@ fn lower_stmt(
     match &stmt.kind {
         ast::StmtKind::VarDecl(decl) => {
             let initializer = lower_expr(&decl.initializer);
-            // `ty` is a placeholder when there is no annotation — sema
-            // will replace it with the inferred initializer type. When
-            // there *is* an annotation, we resolve it eagerly so sema
-            // can cross-check.
             let ty = match &decl.type_annotation {
-                Some(ann) => resolve_type(&ann.name, pool)?,
-                None => pool.void(), // sentinel replaced by sema
+                Some(ann) => Some(resolve_type(&ann.name, pool)?),
+                None => None,
             };
             out.push(HirStmt::VarDecl {
                 name: decl.name.name.clone(),

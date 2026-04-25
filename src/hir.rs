@@ -1,4 +1,5 @@
 use chumsky::span::SimpleSpan;
+use std::fmt;
 
 pub use crate::types::TypeId;
 
@@ -29,7 +30,11 @@ pub enum HirStmt {
     VarDecl {
         name: String,
         mutable: bool,
-        ty: TypeId,
+        /// `None` after `ast_lower` when there is no type annotation;
+        /// sema replaces it with `Some(inferred_from_initializer)`.
+        /// When the source has an annotation, `ast_lower` stores it
+        /// eagerly as `Some(annotated)` so sema can cross-check.
+        ty: Option<TypeId>,
         initializer: HirExpr,
         span: Span,
     },
@@ -76,6 +81,19 @@ pub enum BinaryOp {
     Div,
     Eq,
     NotEq,
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinaryOp::Add => write!(f, "+"),
+            BinaryOp::Sub => write!(f, "-"),
+            BinaryOp::Mul => write!(f, "*"),
+            BinaryOp::Div => write!(f, "/"),
+            BinaryOp::Eq => write!(f, "=="),
+            BinaryOp::NotEq => write!(f, "!="),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
