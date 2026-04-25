@@ -2,6 +2,11 @@
 
 This guide is for agents extending the Ryo compiler. For language design, see `/docs/CLAUDE.md`.
 
+## Design Inspiration
+
+- **Compiler architecture:** takes inspiration from the Zig compiler — see [`/docs/dev/zig_reference.md`](../docs/dev/zig_reference.md).
+- **Concurrency:** takes inspiration from Go — see [`/docs/dev/go_reference.md`](../docs/dev/go_reference.md).
+
 ## Code Quality
 
 Always run before committing (CI enforces these with `-Dwarnings`):
