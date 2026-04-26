@@ -10,9 +10,6 @@ This directory contains implementation notes, architectural decisions, and desig
 
 | File | Content | Next Action |
 |---|---|---|
-| [compilation_pipeline.md](compilation_pipeline.md) | 6-phase pipeline (lex → parse → lower/HIR → codegen → link → execute) with Rust code examples | **Delete** when compiler source code is self-documenting with inline comments |
-| [token.rs.md](token.rs.md) | Lexer implementation guide using `logos` crate | **Delete** when lexer is stable — reference lives in source code |
-| [parser.rs.md](parser.rs.md) | Parser implementation guide using `chumsky` crate | **Delete** when parser is stable — reference lives in source code |
 | [project_structure.md](project_structure.md) | Rust workspace crate organization (ryo-core, ryo-parser, ryo-codegen, etc.) | **Delete** when workspace structure is stable — a top-level `ARCHITECTURE.md` or cargo workspace layout is sufficient |
 
 ### Architecture & Design Decisions
@@ -31,7 +28,7 @@ This directory contains implementation notes, architectural decisions, and desig
 
 | File | Content | Next Action |
 |---|---|---|
-| [installation.md](installation.md) | Installation UX: one-line script, `~/.ryo/`, zig auto-download, `ryo upgrade` | **Implement** the installer — then move user-facing parts to `docs/installation.md` and delete |
+| [installation.md](installation.md) | Installation UX: one-line script, `~/.ryo/`, zig auto-download, `ryo upgrade` | **Implement** the installer (missing windows) — then move user-facing parts to `docs/installation.md` and delete |
 | [official_pkg.md](official_pkg.md) | Recommended official packages for v0.2 (cli, postgres, dotenv, image) | **Implement** the packages — then delete (packages document themselves) |
 | [testing.md](testing.md) | Testing framework gaps: fixtures, mocking, RAII patterns, benchmarks | **Move to spec** testing section or implement — then delete |
 

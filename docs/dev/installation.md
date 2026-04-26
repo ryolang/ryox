@@ -42,7 +42,7 @@ ryo upgrade
 ```
 
 *   **Behavior:** Checks the latest release on GitHub/CDN, downloads the binary, and replaces the current executable in `~/.ryo/bin/`.
-*   **Version Pinning:** `ryo upgrade v0.2.0` (Future)
+*   **Version Pinning:** `ryo upgrade v0.2.0`
 
 ---
 
@@ -91,7 +91,6 @@ A **Deployment** milestone is needed to ensure this is ready for launch.
     *   **CI/CD:** GitHub Actions pipeline to build `ryo` for:
         *   `x86_64-unknown-linux-musl` (Static)
         *   `aarch64-unknown-linux-musl` (Static)
-        *   `x86_64-apple-darwin`
         *   `aarch64-apple-darwin`
         *   `x86_64-pc-windows-msvc`
     *   **The Script:** Write `install.sh` and `install.ps1`.

@@ -1,17 +1,16 @@
 # TODO
 
+- [ ] [Go by Example](https://www.mintlify.com/mmcgrana/gobyexample/introduction)
 - [ ] Iterators
 - [ ] Define Testing
 - [ ] https://ziglang.org/documentation/0.1.1/#case-study-printf
 - [ ] Debug Breakpoints https://ziglang.org/documentation/0.1.1/#builtin-breakpoint
-- [ ] main function required?
 - [ ] my_str: str = "hello" when pass as reference fn world(hello: str) ->, should not include the derref world(&str), python and new developers do not understand &, we should use a short english word as we do for && -> and
 - [ ] Zen of ryo. https://dave.cheney.net/2020/02/23/the-zen-of-go
 - [ ] review https://docs.modular.com/mojo/manual/values/ownership copy design
 - [ ] Set up benchmarks for performance and memory in github workflows and keep track of them.
 - [ ] get the domain https://ryo-lang.org
 - [ ] Add https://scorecard.dev/
-- [ ] Set up clippy https://github.com/rust-lang/rust-clippy
 - [ ] set up https://codspeed.io/
 - [ ] review for more https://github.com/astral-sh/ruff/tree/main/.github/workflows
 - [ ] Effective Go. review and get insigths https://go.dev/doc/effective_go
