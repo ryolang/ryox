@@ -467,7 +467,12 @@ pub(crate) fn view_liveness_stmt(
             // rolled back to the pre-if state.
             for arm_writes in arm_maps {
                 for (k, v) in arm_writes {
-                    bindings.map.entry(k).or_insert(v);
+                    // Logged insert (not map.entry): an enclosing arm's
+                    // rollback must undo this merge and pick the name up
+                    // in its write set.
+                    if !bindings.map.contains_key(&k) {
+                        bindings.insert(k, v);
+                    }
                 }
             }
         }
@@ -500,7 +505,11 @@ pub(crate) fn view_liveness_loop_body(
     view_liveness_stmts(tir, pool, body, bindings, last_use, arm_last_reads);
     let writes = bindings.rollback(mark);
     for (k, v) in writes {
-        bindings.map.entry(k).or_insert(v);
+        // Logged insert (not map.entry): an enclosing arm's rollback must
+        // undo this merge and pick the name up in its write set.
+        if !bindings.map.contains_key(&k) {
+            bindings.insert(k, v);
+        }
     }
 }
 
