@@ -643,3 +643,50 @@ pub(crate) fn restore_view_last_use(own: &mut Ownership, saved: Vec<(TirRef, Tir
         Ownership::dense_set(&mut own.view_last_use, vi, global_lu);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nested mark/rollback invariant: an inner if's write set, merged
+    /// back with a guarded logged insert, must be picked up by the
+    /// enclosing arm's rollback (the merge's log entry is replayed and
+    /// undone), while a removal in the outer arm drops that name from
+    /// the outer write set.
+    #[test]
+    fn bindings_nested_rollback_picks_up_inner_merge_writes() {
+        let mut bindings = Bindings::default();
+        let (a, b, c) = (
+            StringId::from_raw(1),
+            StringId::from_raw(2),
+            StringId::from_raw(3),
+        );
+        let (va, vb, vc) = (
+            TirRef::from_raw(10),
+            TirRef::from_raw(11),
+            TirRef::from_raw(12),
+        );
+
+        bindings.insert(a, va);
+        let outer = bindings.mark();
+        bindings.insert(b, vb);
+        let inner = bindings.mark();
+        // An inner if's logged merge write.
+        if !bindings.map.contains_key(&c) {
+            bindings.insert(c, vc);
+        }
+        let inner_writes = bindings.rollback(inner);
+        assert_eq!(inner_writes, HashMap::from([(c, vc)]));
+        assert_eq!(bindings.map, HashMap::from([(a, va), (b, vb)]));
+        // Merge the inner write set the way the merge sites do.
+        for (k, v) in inner_writes {
+            if !bindings.map.contains_key(&k) {
+                bindings.insert(k, v);
+            }
+        }
+        bindings.remove(b);
+        let outer_writes = bindings.rollback(outer);
+        assert_eq!(outer_writes, HashMap::from([(c, vc)]));
+        assert_eq!(bindings.map, HashMap::from([(a, va)]));
+    }
+}

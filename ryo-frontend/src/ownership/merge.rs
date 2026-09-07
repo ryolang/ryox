@@ -80,7 +80,9 @@ impl Ownership {
         // touching `self.states`. After the per-TirRef merge below
         // the binding-aware override (merge_binding_states) revisits
         // each pre-branch binding and recomputes its state through
-        // whichever owner each branch ended on.
+        // whichever owner each branch ended on. Must be taken before
+        // the `current_owner` union below, or branch-local bindings
+        // would be mistaken for pre-branch ones.
         let pre_branch_owners = self.current_owner.clone();
 
         // Rule: any branch Moved → Moved; otherwise first observed

@@ -70,7 +70,7 @@ fn branch_ids_unique_across_post_loop_if() {
 }
 
 #[test]
-fn merge_branches_takes_max_next_branch_id() {
+fn merge_branches_leaves_branch_allocator_untouched() {
     // Direct regression for Bug 4 in M8.1c. The loop merge starts
     // from the pre-loop entry; the BranchId allocator lives on the
     // single `Ownership` walked in place across all arms and loop

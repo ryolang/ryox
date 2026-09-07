@@ -687,7 +687,7 @@ pub(crate) fn collect_loop_nesting(tir: &Tir) -> LoopNesting {
 /// gaps in BranchId numbering, which is harmless because ids only
 /// need function-uniqueness (the BranchId allocator lives on the
 /// single `Ownership` walked in place, so no merge can roll it
-/// backward; see `merge_branches_takes_max_next_branch_id`).
+/// backward; see `merge_branches_leaves_branch_allocator_untouched`).
 pub(crate) fn analyze_loop_body(
     tir: &Tir,
     pool: &InternPool,
@@ -696,7 +696,7 @@ pub(crate) fn analyze_loop_body(
     sidecar: &mut FunctionSidecar,
     body: &[TirRef],
 ) {
-    // Snapshot ONLY the non-monotone fields (see Step 2).
+    // Snapshot ONLY the non-monotone fields.
     // `live_projections` joined that set in M8.4 (projections die at
     // their last use); `root_owner` is insert-only and stays live.
     // The loop-entry snapshot is kept for the final merge in Phase 2.
