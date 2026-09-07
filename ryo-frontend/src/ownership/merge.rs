@@ -5,97 +5,94 @@ use ryo_core::tir::{Span, TirRef};
 use ryo_core::types::StringId;
 use std::collections::{HashMap, HashSet};
 
+/// The four non-monotone `Ownership` fields, extracted as a unit for
+/// per-arm / per-loop-pass snapshot and restore. Everything else in
+/// `Ownership` is monotone (arms accumulate it in place and never
+/// restore it) or walk-constant — see the field docs in `mod.rs`.
+#[derive(Clone, Default)]
+pub(crate) struct BranchState {
+    pub states: HashMap<Owner, OwnerState>,
+    pub current_owner: HashMap<StringId, Owner>,
+    pub pending_dead_store: HashMap<Owner, (StringId, Span, TirRef)>,
+    pub live_projections: HashMap<Owner, Vec<Owner>>,
+}
+
 impl Ownership {
-    /// Conservatively merge per-branch lattices into `self`. Per-field rules:
-    /// - `next_branch_id`: max across self + branches (monotonic; loop merges
-    ///   must not roll the allocator backward).
+    /// Clone the four non-monotone fields — the single snapshot taken
+    /// per branch point / loop.
+    pub(crate) fn snapshot_branch(&self) -> BranchState {
+        BranchState {
+            states: self.states.clone(),
+            current_owner: self.current_owner.clone(),
+            pending_dead_store: self.pending_dead_store.clone(),
+            live_projections: self.live_projections.clone(),
+        }
+    }
+
+    /// Move the four non-monotone fields out (installing `restore`
+    /// in their place, without cloning it) so a finished arm / loop
+    /// pass can hand its end state to the merge.
+    pub(crate) fn take_branch(&mut self, restore: BranchState) -> BranchState {
+        BranchState {
+            states: std::mem::replace(&mut self.states, restore.states),
+            current_owner: std::mem::replace(&mut self.current_owner, restore.current_owner),
+            pending_dead_store: std::mem::replace(
+                &mut self.pending_dead_store,
+                restore.pending_dead_store,
+            ),
+            live_projections: std::mem::replace(
+                &mut self.live_projections,
+                restore.live_projections,
+            ),
+        }
+    }
+}
+
+impl Ownership {
+    /// Conservatively merge per-branch lattices into `self`. On entry,
+    /// `self`'s four non-monotone fields hold the pre-branch state (the
+    /// caller's snapshot); each arm's end state merges into them in arm
+    /// order. Per-field rules:
     /// - `states`: any branch `Moved` → `Moved`; otherwise first observed
     ///   wins. So a value consumed on only one branch is still treated as
     ///   moved at the join point and a post-`if` use trips E0020.
-    /// - `current_owner`, `origin`: first-write-wins across branches; reseats
+    /// - `current_owner`: first-write-wins across branches; reseats
     ///   inside a branch survive the join.
-    /// - `temp_owners`: union (entries minted inside a branch/loop body
-    ///   must survive so the anonymous-temp pass sees them at function
-    ///   exit).
-    /// - `owner_at_read`: union with first-write-wins (read TirRefs are
-    ///   unique per TIR, so collisions don't happen in practice).
     /// - `pending_dead_store`: pre-branch keys intersect (any branch that
     ///   read the binding clears the dead-store warning); branch-local keys
     ///   union.
-    /// - `root_owner`: first-write-wins, mirroring `origin` (a view's root
-    ///   never changes, so conflicts don't happen in practice).
     /// - `live_projections`: union per root — a view live on any branch is
     ///   live at the join (P2). `analyze_if_stmt` prunes views whose last
     ///   use is inside the branch afterwards (they are dead on every path
     ///   at the join).
-    /// - `owner_hazards`: union — the hazard log is monotone; duplicates
-    ///   are harmless to its `any()`-shaped queries.
     /// - Final pass: per-binding state is recomputed through whichever
     ///   end-of-branch owner each branch left, so reseats inside a branch
     ///   contribute their state to the merged binding.
-    pub(super) fn merge_branches(&mut self, branches: &[&Ownership]) {
-        // BranchId monotonicity: never let a merge roll the allocator
-        // backward. The loop fixed-point (analyze_loop_body) merges
-        // only the four non-monotone fields via merge_non_monotone,
-        // so next_branch_id minted inside a loop body survives into
-        // post-loop ifs through `self`; this max rule is what keeps
-        // if-arm merges from ever rolling it backward and colliding
-        // in codegen's branch_blocks map.
-        self.next_branch_id = std::cmp::max(
-            self.next_branch_id,
-            branches.iter().map(|b| b.next_branch_id).max().unwrap_or(0),
-        );
-
+    ///
+    /// Monotone fields (`origin`, `owner_at_read`, `temp_owners`,
+    /// `root_owner`, `owner_hazards`, `reseat_drops`, `return_epilogue`,
+    /// `next_branch_id`) are deliberately NOT merged: arms walk the same
+    /// `Ownership` in place and never restore those fields, so `self`
+    /// already holds every arm's contribution and a union would be a
+    /// subset-into-superset no-op.
+    pub(super) fn merge_branches(&mut self, branches: Vec<BranchState>) {
         // Snapshot pre-branch (name → owner) bindings before we start
         // touching `self.states`. After the per-TirRef merge below
         // the binding-aware override (merge_binding_states) revisits
         // each pre-branch binding and recomputes its state through
-        // whichever owner each branch ended on. Must be taken before
-        // the `current_owner` union below, or branch-local bindings
-        // would be mistaken for pre-branch ones.
+        // whichever owner each branch ended on.
         let pre_branch_owners = self.current_owner.clone();
 
         // Rule: any branch Moved → Moved; otherwise first observed
-        // (across branches) wins. Walk each branch once and merge
-        // directly into `self.states` — no intermediate set of keys.
-        for b in branches {
+        // (across branches) wins.
+        for b in &branches {
             merge_states_any_moved_wins(&mut self.states, &b.states);
         }
-        // Union the remaining branch-local fields. `current_owner` /
-        // `origin` use first-wins (a filled dst slot is kept).
-        // `temp_owners` is
-        // unioned so entries introduced inside a branch (or loop body)
-        // survive the merge — without this a `StrConst`/`StrConcat`/Call
-        // inside a `while` body is silently dropped from `temp_owners`
-        // when the merged state starts from the pre-loop entry.
-        // `owner_at_read`
-        // slots are unique per TirRef (instructions aren't shared across
-        // blocks), so each slot is filled in at most one branch and
-        // first-wins is correct.
-        for b in branches {
+        for b in &branches {
             merge_current_owner_first_wins(&mut self.current_owner, &b.current_owner);
-            debug_assert_eq!(self.origin.len(), b.origin.len());
-            for (i, v) in b.origin.iter().enumerate() {
-                if self.origin[i].is_none() {
-                    self.origin[i] = *v;
-                }
-            }
-            self.temp_owners.extend(b.temp_owners.iter().copied());
-            debug_assert_eq!(self.owner_at_read.len(), b.owner_at_read.len());
-            for (i, v) in b.owner_at_read.iter().enumerate() {
-                if self.owner_at_read[i].is_none() {
-                    self.owner_at_read[i] = *v;
-                }
-            }
-            // P3 root mapping: first-wins, mirroring `origin`.
-            for (k, v) in &b.root_owner {
-                self.root_owner.entry(*k).or_insert(*v);
-            }
             // P2 freeze ranges: union per root (the caller prunes
             // views whose last use is inside the branch).
             union_live_projections(&mut self.live_projections, &b.live_projections);
-            // W0003 hazard log: union (monotone; duplicates harmless).
-            self.owner_hazards.extend(b.owner_hazards.iter().copied());
         }
 
         // Binding-aware override: recompute each pre-branch binding's

@@ -1,7 +1,7 @@
 //! Forward statement/expression walk — split from `mod.rs`.
 
 use super::{
-    Owner, OwnerState, Ownership, ReseatDrop, analyze_for_range, analyze_while_loop,
+    BranchState, Owner, OwnerState, Ownership, ReseatDrop, analyze_for_range, analyze_while_loop,
     check_source_projected, consumed_binding_name, drain_dying_views, format_binding,
     needs_tracking, owner_name_for_diag, owner_sort_key, param_idx, projection_root,
     prune_branch_dead_projections, push_unique, record_return_epilogue,
@@ -548,14 +548,7 @@ pub(crate) fn analyze_if_stmt(
         else_branch,
     });
 
-    let snap_states = own.states.clone();
-    let snap_current_owner = own.current_owner.clone();
-    let snap_pending_dead_store = own.pending_dead_store.clone();
-    // P2 freeze ranges are non-monotone (projections die at their last
-    // use), so they join the per-arm snapshot/restore set like the
-    // other non-monotone fields. `root_owner` is insert-only and stays
-    // live across arms, mirroring `origin`.
-    let snap_live_projections = own.live_projections.clone();
+    let snap = own.snapshot_branch();
 
     let then_subtree = stmts_subtree(tir, &view.then_stmts);
     let saved = refine_view_liveness_for_arm(own, r, 0, &if_subtree, &then_subtree);
@@ -563,15 +556,10 @@ pub(crate) fn analyze_if_stmt(
         analyze_stmt(tir, pool, own, sink, sidecar, *stmt);
     }
     restore_view_last_use(own, saved);
-    let then_state = own.clone();
+    let mut branch_results: Vec<BranchState> = Vec::with_capacity(2 + view.elif_branches.len());
+    branch_results.push(own.take_branch(snap.clone()));
 
-    let mut branch_results = vec![then_state];
     for (elif_index, elif) in view.elif_branches.iter().enumerate() {
-        own.states = snap_states.clone();
-        own.current_owner = snap_current_owner.clone();
-        own.pending_dead_store = snap_pending_dead_store.clone();
-        own.live_projections = snap_live_projections.clone();
-
         visit_expr(tir, pool, own, sink, sidecar, elif.cond);
         // See the then-cond note above: projections dying at an elif
         // condition lift before its body runs.
@@ -583,15 +571,10 @@ pub(crate) fn analyze_if_stmt(
             analyze_stmt(tir, pool, own, sink, sidecar, *stmt);
         }
         restore_view_last_use(own, saved);
-        branch_results.push(own.clone());
+        branch_results.push(own.take_branch(snap.clone()));
     }
 
     if let Some(else_stmts) = &view.else_stmts {
-        own.states = snap_states.clone();
-        own.current_owner = snap_current_owner.clone();
-        own.pending_dead_store = snap_pending_dead_store.clone();
-        own.live_projections = snap_live_projections.clone();
-
         let else_subtree = stmts_subtree(tir, else_stmts);
         let saved = refine_view_liveness_for_arm(
             own,
@@ -604,14 +587,10 @@ pub(crate) fn analyze_if_stmt(
             analyze_stmt(tir, pool, own, sink, sidecar, *stmt);
         }
         restore_view_last_use(own, saved);
-        branch_results.push(own.clone());
+        branch_results.push(own.take_branch(snap.clone()));
     } else {
-        let mut else_snap = own.clone();
-        else_snap.states = snap_states.clone();
-        else_snap.current_owner = snap_current_owner.clone();
-        else_snap.pending_dead_store = snap_pending_dead_store.clone();
-        else_snap.live_projections = snap_live_projections.clone();
-        branch_results.push(else_snap);
+        // Else-less fall-through pseudo-arm: the pre-if state.
+        branch_results.push(snap.clone());
     }
 
     // Schedule branch-gated Frees for owners that diverge across
@@ -630,7 +609,7 @@ pub(crate) fn analyze_if_stmt(
     struct ArmInfo<'a> {
         branch_id: BranchId,
         last_stmt: Option<TirRef>,
-        state: &'a Ownership,
+        state: &'a BranchState,
     }
 
     let mut arms: Vec<ArmInfo> = Vec::with_capacity(branch_results.len());
@@ -711,7 +690,8 @@ pub(crate) fn analyze_if_stmt(
     // the reassign did not happen. Includes the implicit fall-through
     // pseudo-arm of an else-less if (its BranchId was minted above).
     {
-        let mut arm_states: Vec<(BranchId, &Ownership)> = Vec::with_capacity(branch_results.len());
+        let mut arm_states: Vec<(BranchId, &BranchState)> =
+            Vec::with_capacity(branch_results.len());
         arm_states.push((then_branch, &branch_results[0]));
         for (i, _) in view.elif_branches.iter().enumerate() {
             arm_states.push((elif_branches[i], &branch_results[1 + i]));
@@ -722,7 +702,7 @@ pub(crate) fn analyze_if_stmt(
                 .last()
                 .expect("else/fall-through snapshot pushed"),
         ));
-        for (name, owner_pre) in &snap_current_owner {
+        for (name, owner_pre) in &snap.current_owner {
             // Only tracked (Move-typed) locals need drops; Copy values
             // have no buffer, and params are covered by the exit-time
             // param free.
@@ -761,13 +741,9 @@ pub(crate) fn analyze_if_stmt(
         }
     }
 
-    // Final restore: restore only the non-monotone fields.
-    own.states = snap_states;
-    own.current_owner = snap_current_owner;
-    own.pending_dead_store = snap_pending_dead_store;
-    own.live_projections = snap_live_projections;
-    let refs: Vec<&Ownership> = branch_results.iter().collect();
-    own.merge_branches(&refs);
+    // `own` already holds the pre-if non-monotone fields (installed by
+    // the last take_branch) — merge every arm's end state into them.
+    own.merge_branches(branch_results);
     // P4 (final spec §3.2): a view whose last use is inside this if is
     // dead at the join on every path — prune it from the merged freeze
     // ranges (see prune_branch_dead_projections).

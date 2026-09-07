@@ -685,8 +685,9 @@ pub(crate) fn collect_loop_nesting(tir: &Tir) -> LoopNesting {
 /// deliberately not rolled back. `next_branch_id` likewise stays
 /// monotone (never snapshotted/restored): propagate passes may leave
 /// gaps in BranchId numbering, which is harmless because ids only
-/// need function-uniqueness (see `merge_branches`' BranchId
-/// monotonicity note and `merge_branches_takes_max_next_branch_id`).
+/// need function-uniqueness (the BranchId allocator lives on the
+/// single `Ownership` walked in place, so no merge can roll it
+/// backward; see `merge_branches_takes_max_next_branch_id`).
 pub(crate) fn analyze_loop_body(
     tir: &Tir,
     pool: &InternPool,
