@@ -273,12 +273,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Summary:** The `mode == Borrow && tag == ViewAsOwner → projection_root else underlying_owner` look-through is written out twice, near-verbatim, in two helpers that must agree for the P6'/E4 rules to stay coherent. A change to one side (e.g. a new look-through case) silently desynchronizes the diagnostic span search from the ownership partition.
 **Resolution:** Extract one `fn call_arg_owner(own, tir, pool, mode, arg) -> Owner` helper used by both sites.
 
-### I-136 — Ownership pass clones whole state maps on hot paths
-
-**Files:** `ryo-frontend/src/ownership/walk.rs` (:556-578 — `Ownership` clone per if/elif/else arm), `ryo-frontend/src/ownership/loops.rs` (:480-537 — map clones + `sidecar.clone()` per propagate pass)
-**Summary:** Every branch arm and every loop-propagate pass deep-clones the full ownership state (19 fields, several `HashMap`s). Correct, but against R3's allocation discipline on the hottest analysis path; the cost grows with function body size. (Codegen's per-block map clones are tracked separately as I-095.)
-**Resolution:** After I-129 converts the dense-index maps to `Vec` side tables, replace whole-state clones with snapshot/restore of the four non-monotone fields only, or a copy-on-write per-arm overlay. Measure on the benchmark suite before and after.
-
 ### I-164 — Guard-elision extensions deferred from the value-range work
 
 **Files:** `ryo-backend/src/codegen/expr.rs` (checked-op helpers, `emit_div_guard`), `ryo-backend/src/codegen/mod.rs` (if/while emission)

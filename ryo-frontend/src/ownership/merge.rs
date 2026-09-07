@@ -179,6 +179,21 @@ pub(crate) fn merge_binding_states(
     pre_owners: &HashMap<StringId, Owner>,
     sides: &[MergeSide<'_>],
 ) {
+    for (owner, state) in binding_state_writes(pre_owners, sides) {
+        dst_states.insert(owner, state);
+    }
+}
+
+/// Compute the binding-aware override writes without touching `dst`
+/// (see merge_binding_states for semantics). Split out so by-value
+/// callers (`merge_non_monotone`) can run it while the side maps are
+/// still intact, then apply the writes after moving a side into the
+/// merge accumulator.
+pub(crate) fn binding_state_writes(
+    pre_owners: &HashMap<StringId, Owner>,
+    sides: &[MergeSide<'_>],
+) -> Vec<(Owner, OwnerState)> {
+    let mut writes: Vec<(Owner, OwnerState)> = Vec::with_capacity(pre_owners.len());
     for (&name, &owner_pre) in pre_owners {
         let mut merged: Option<OwnerState> = None;
         for &(current_owner, states) in sides {
@@ -201,9 +216,10 @@ pub(crate) fn merge_binding_states(
             }
         }
         if let Some(state) = merged {
-            dst_states.insert(owner_pre, state);
+            writes.push((owner_pre, state));
         }
     }
+    writes
 }
 
 /// Pending dead-store merge. A key falls into one of two buckets
@@ -299,49 +315,45 @@ pub(crate) fn states_differ_snapshot(
     false
 }
 
-/// Merge only the non-monotone fields of two states (represented by their snapshots)
-/// into `own`'s corresponding fields, leaving the monotone fields intact.
-/// Shares its per-field merge rules with `Ownership::merge_branches`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn merge_non_monotone(
-    own: &mut Ownership,
-    snap_states: &HashMap<Owner, OwnerState>,
-    after_states: &HashMap<Owner, OwnerState>,
-    snap_current_owner: &HashMap<StringId, Owner>,
-    after_current_owner: &HashMap<StringId, Owner>,
-    snap_pending_dead_store: &HashMap<Owner, (StringId, Span, TirRef)>,
-    after_pending_dead_store: &HashMap<Owner, (StringId, Span, TirRef)>,
-    snap_live_projections: &HashMap<Owner, Vec<Owner>>,
-    after_live_projections: &HashMap<Owner, Vec<Owner>>,
-) {
-    // 1. Merge states: any side Moved -> Moved; otherwise first observed (snap_states) wins.
-    let mut merged_states = snap_states.clone();
-    merge_states_any_moved_wins(&mut merged_states, after_states);
-
-    // Binding-aware override — NOT monotone (see merge_binding_states);
-    // analyze_loop_body's propagate-phase cap depends on that.
-    merge_binding_states(
-        &mut merged_states,
-        snap_current_owner,
+/// Merge only the non-monotone fields of two states into `own`'s
+/// corresponding fields, leaving the monotone fields intact. Takes
+/// both states BY VALUE: `entry`'s maps become the merge accumulators,
+/// so no snapshot clones happen here. Shares its per-field merge rules
+/// with `Ownership::merge_branches`.
+pub(crate) fn merge_non_monotone(own: &mut Ownership, entry: BranchState, after: BranchState) {
+    // Binding-aware override computed FIRST, while `entry`/`after` are
+    // intact — NOT monotone (see binding_state_writes);
+    // analyze_loop_body's propagate-phase cap depends on that. Applied
+    // after the Moved-merge, matching the old clone-then-merge order.
+    let writes = binding_state_writes(
+        &entry.current_owner,
         &[
-            (snap_current_owner, snap_states),
-            (after_current_owner, after_states),
+            (&entry.current_owner, &entry.states),
+            (&after.current_owner, &after.states),
         ],
     );
 
+    // 1. Merge states: any side Moved -> Moved; otherwise entry (first
+    //    observed) wins.
+    let mut merged_states = entry.states;
+    merge_states_any_moved_wins(&mut merged_states, &after.states);
+    for (owner, state) in writes {
+        merged_states.insert(owner, state);
+    }
+
     // 2. Merge current_owner: first-wins.
-    let mut merged_current_owner = snap_current_owner.clone();
-    merge_current_owner_first_wins(&mut merged_current_owner, after_current_owner);
+    let mut merged_current_owner = entry.current_owner;
+    merge_current_owner_first_wins(&mut merged_current_owner, &after.current_owner);
 
     // 3. Merge pending_dead_store: pre-existing keys intersect; local keys union.
-    let mut merged_pending_dead_store = snap_pending_dead_store.clone();
-    merge_pending_dead_store(&mut merged_pending_dead_store, &[after_pending_dead_store]);
+    let mut merged_pending_dead_store = entry.pending_dead_store;
+    merge_pending_dead_store(&mut merged_pending_dead_store, &[&after.pending_dead_store]);
 
     // 4. Merge live_projections: union per root (P2 freeze ranges,
-    // final spec §3.2) — a view live on either side of the back-edge
-    // stays live. Monotone, so the 2-pass fixed point still suffices.
-    let mut merged_live_projections = snap_live_projections.clone();
-    union_live_projections(&mut merged_live_projections, after_live_projections);
+    //    final spec §3.2) — a view live on either side of the back-edge
+    //    stays live. Monotone, so the 2-pass fixed point still suffices.
+    let mut merged_live_projections = entry.live_projections;
+    union_live_projections(&mut merged_live_projections, &after.live_projections);
 
     own.states = merged_states;
     own.current_owner = merged_current_owner;

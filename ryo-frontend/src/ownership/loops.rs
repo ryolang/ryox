@@ -1,7 +1,7 @@
 //! Loop/branch ownership analysis — split from `mod.rs`.
 
 use super::{
-    Owner, OwnerState, Ownership, analyze_stmt, merge_non_monotone, owner_sort_key,
+    BranchState, Owner, OwnerState, Ownership, analyze_stmt, merge_non_monotone, owner_sort_key,
     remove_loop_deferred_views, states_differ_snapshot, visit_expr,
 };
 use ryo_core::diag::DiagSink;
@@ -661,8 +661,8 @@ pub(crate) fn collect_loop_nesting(tir: &Tir) -> LoopNesting {
 ///
 /// Phase 1 — propagate-only propagation, bounded to two walks (the
 /// bound is load-bearing — see the comment in the body). Walks the
-/// body with a throwaway `DiagSink` AND a staging sidecar (a clone of
-/// the real one), so speculative diagnostics and sidecar writes are
+/// body with a throwaway `DiagSink` AND a fresh scratch sidecar, so
+/// speculative diagnostics and sidecar writes are
 /// discarded at the end of each iteration. After each walk, compares
 /// entry vs post-body via `states_differ_snapshot` (the full tuple —
 /// owner states plus live-projection emptiness) and always merges
@@ -700,10 +700,7 @@ pub(crate) fn analyze_loop_body(
     // `live_projections` joined that set in M8.4 (projections die at
     // their last use); `root_owner` is insert-only and stays live.
     // The loop-entry snapshot is kept for the final merge in Phase 2.
-    let snap_states = own.states.clone();
-    let snap_current_owner = own.current_owner.clone();
-    let snap_pending_dead_store = own.pending_dead_store.clone();
-    let snap_live_projections = own.live_projections.clone();
+    let snap = own.snapshot_branch();
 
     // Phase 1 — propagate-only fixed-point, bounded to
     // MAX_PROPAGATE_PASSES walks. The bound is load-bearing, not just
@@ -719,45 +716,37 @@ pub(crate) fn analyze_loop_body(
     // walk's comparison and break early; oscillating bodies stop at
     // the cap with the same merged state the old re-walk started from.
     const MAX_PROPAGATE_PASSES: usize = 2;
-    let mut entry_states = snap_states.clone();
-    let mut entry_current_owner = snap_current_owner.clone();
-    let mut entry_pending_dead_store = snap_pending_dead_store.clone();
-    let mut entry_live_projections = snap_live_projections.clone();
+    let mut entry = snap.clone();
     for _ in 0..MAX_PROPAGATE_PASSES {
         let mut scratch = DiagSink::new();
-        let mut staging = sidecar.clone();
+        // Fresh scratch sidecar, not a clone of the real one:
+        // speculative sidecar writes are discarded at the end of each
+        // pass, and the walk never reads pre-existing sidecar content
+        // (the only readers — LoopExitCtx::new /
+        // schedule_break_continue_frees — run post-walk from
+        // analyze_function against the REAL sidecar), so cloning the
+        // accumulated free_schedule per pass is pure waste.
+        let mut staging = FunctionSidecar::new(tir.name, tir.instructions.len());
         for stmt in body {
             analyze_stmt(tir, pool, own, &mut scratch, &mut staging, *stmt);
         }
-        let after = (
-            own.states.clone(),
-            own.current_owner.clone(),
-            own.pending_dead_store.clone(),
-            own.live_projections.clone(),
+        // Move the post-body state out, installing an empty placeholder
+        // — merge_non_monotone overwrites all four fields below.
+        let after = own.take_branch(BranchState::default());
+        let differ = states_differ_snapshot(
+            &entry.states,
+            &after.states,
+            &entry.live_projections,
+            &after.live_projections,
         );
-        let differ =
-            states_differ_snapshot(&entry_states, &after.0, &entry_live_projections, &after.3);
         // Always merge (entry ⊔ post-body) into `own`; on convergence
         // post-body == entry so the merge is a no-op and `own` already
         // holds the converged entry state Phase 2 starts from.
-        merge_non_monotone(
-            own,
-            &entry_states,
-            &after.0,
-            &entry_current_owner,
-            &after.1,
-            &entry_pending_dead_store,
-            &after.2,
-            &entry_live_projections,
-            &after.3,
-        );
+        merge_non_monotone(own, entry, after);
         if !differ {
             break;
         }
-        entry_states = own.states.clone();
-        entry_current_owner = own.current_owner.clone();
-        entry_pending_dead_store = own.pending_dead_store.clone();
-        entry_live_projections = own.live_projections.clone();
+        entry = own.snapshot_branch();
     }
 
     // Phase 2 — single check pass against the real sink and sidecar.
@@ -766,21 +755,8 @@ pub(crate) fn analyze_loop_body(
     }
     // Final merge with the loop-entry snapshot: the loop may execute
     // zero times, so post-loop state = entry ⊔ post-check-pass.
-    let own_states_clone = own.states.clone();
-    let own_current_owner_clone = own.current_owner.clone();
-    let own_pending_dead_store_clone = own.pending_dead_store.clone();
-    let own_live_projections_clone = own.live_projections.clone();
-    merge_non_monotone(
-        own,
-        &snap_states,
-        &own_states_clone,
-        &snap_current_owner,
-        &own_current_owner_clone,
-        &snap_pending_dead_store,
-        &own_pending_dead_store_clone,
-        &snap_live_projections,
-        &own_live_projections_clone,
-    );
+    let after = own.take_branch(BranchState::default());
+    merge_non_monotone(own, snap, after);
 }
 
 /// Fixed-point ownership analysis for `while`, in the
