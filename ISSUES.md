@@ -161,12 +161,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Summary:** Every str stack slot hardcodes 24 bytes / align 3 / offsets 0,8,16 (consts at `codegen/mod.rs:40-45`), and `len`/`cap` are hardcoded `types::I64` (`codegen/expr.rs:1155-1170`) while `ptr` is pointer-sized. On a 32-bit target, caller and callee layouts silently mismatch.
 **Resolution:** Centralize the fat-pointer layout in one place (offsets and size computed from `module.target_config().pointer_type()`) and mirror it in the runtime. Prerequisite for any 32-bit target; interacts with I-021 (bool FFI width) when FFI lands.
 
-### I-079 — Unary minus on `float` is rejected
-
-**Files:** `ryo-frontend/src/sema/expr.rs` (`InstTag::Neg` arm :143-177)
-**Summary:** The `Neg` arm only handles `TypeKind::Int` (`INeg`); `-x` on a float operand emits `UnsupportedOperator` even though float arithmetic is otherwise fully supported. Asymmetric and undocumented; smells like an oversight rather than a decision.
-**Resolution:** Add `TirTag::FNeg` lowering to Cranelift `fneg` and accept `Float` in the `Neg` arm.
-
 ### I-080 — UIR/TIR `extra`-layout modules are duplicated with subtly different layouts
 
 **Files:** `ryo-core/src/uir.rs` (`var_decl_extra` etc.), `ryo-core/src/tir.rs` (`call_extra` :337-342, `var_decl_extra` :355-362, `assign_extra`/… :370-418)

@@ -383,6 +383,18 @@ fn float_program_compiles_and_runs() {
 }
 
 #[test]
+fn float_unary_minus_compiles_and_runs() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let code = "fn main():\n\tx: float = 2.5\n\ty = -x\n\tz = -0.0\n\tprint(float_to_str(y))\n\tprint(float_to_str(z + 0.0))\n";
+    let test_file = create_test_file(temp_dir.path(), "neg_float.ryo", code);
+    let output = run_ryo_command(&["run", "neg_float.ryo"], &test_file)
+        .expect("Failed to run ryo run command");
+    assert!(output.status.success(), "ryo run should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("-2.5"), "should print -2.5, got: {stdout}");
+}
+
+#[test]
 fn integer_division_and_modulo_compile_and_run() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     // 10 / 3 = 3, 10 % 3 = 1. M8a: void main, so the program just

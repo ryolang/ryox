@@ -675,6 +675,25 @@ fn neg_on_bool_rejected() {
 }
 
 #[test]
+fn neg_on_float_accepted() {
+    let (tirs, pool) =
+        run("fn main():\n\tx: float = 1.5\n\ty = -x\n").expect("float neg should type-check");
+    let main = &tirs[0];
+    let fneg = main
+        .instructions
+        .iter()
+        .find(|inst| inst.tag == TirTag::FNeg)
+        .expect("expected an FNeg instruction");
+    assert_eq!(fneg.ty, pool.float());
+}
+
+#[test]
+fn neg_on_float_literal_accepted() {
+    run("fn main():\n\ty = -2.5\n\tprint(float_to_str(y))\n")
+        .expect("float literal neg should type-check");
+}
+
+#[test]
 fn nested_expression_types_all_filled() {
     let (tirs, _) = run("x = (1 + 2) * -3").unwrap();
     for tir in &tirs {
