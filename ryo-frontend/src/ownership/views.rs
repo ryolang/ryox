@@ -251,6 +251,64 @@ pub(crate) struct ViewLiveness {
     pub(crate) arm_last_reads: HashMap<TirRef, Vec<HashMap<TirRef, TirRef>>>,
 }
 
+/// View-binding tracker for the liveness pre-walk: a `StringId → TirRef`
+/// map plus an undo log, so branch arms and loop bodies restore the
+/// pre-branch state by replaying the log instead of cloning the whole
+/// map per arm. Each log entry is (mutated name, pre-mutation value,
+/// post-mutation value on inserts): the pre-mutation value drives
+/// rollback, the post-mutation value builds each arm's write set.
+#[derive(Default)]
+pub(crate) struct Bindings {
+    map: HashMap<StringId, TirRef>,
+    log: Vec<(StringId, Option<TirRef>, Option<TirRef>)>,
+}
+
+impl Bindings {
+    fn insert(&mut self, k: StringId, v: TirRef) {
+        let old = self.map.insert(k, v);
+        self.log.push((k, old, Some(v)));
+    }
+
+    fn remove(&mut self, k: StringId) {
+        let old = self.map.remove(&k);
+        self.log.push((k, old, None));
+    }
+
+    fn mark(&self) -> usize {
+        self.log.len()
+    }
+
+    /// Restore the map to `mark` and return the segment's write set:
+    /// last write per name, with a later removal dropping the name
+    /// (matching the old full-map merge, where a name removed inside
+    /// an arm is absent from that arm's map).
+    fn rollback(&mut self, mark: usize) -> HashMap<StringId, TirRef> {
+        let mut writes: HashMap<StringId, TirRef> = HashMap::new();
+        for &(k, _, new) in &self.log[mark..] {
+            match new {
+                Some(v) => {
+                    writes.insert(k, v);
+                }
+                None => {
+                    writes.remove(&k);
+                }
+            }
+        }
+        while self.log.len() > mark {
+            let (k, old, _) = self.log.pop().expect("log.len() > mark");
+            match old {
+                Some(prev) => {
+                    self.map.insert(k, prev);
+                }
+                None => {
+                    self.map.remove(&k);
+                }
+            }
+        }
+        writes
+    }
+}
+
 /// Simulates the walk's `current_owner` discipline for `strview`-typed
 /// bindings only (snapshot per branch arm, first-wins merge;
 /// entry-first-wins at loop back-edges) and records each bound view's
@@ -263,7 +321,7 @@ pub(crate) fn collect_view_liveness(
     pool: &InternPool,
     nesting: &LoopNesting,
 ) -> ViewLiveness {
-    let mut bindings: HashMap<StringId, TirRef> = HashMap::new();
+    let mut bindings = Bindings::default();
     let mut last_use: HashMap<TirRef, TirRef> = HashMap::new();
     let mut arm_last_reads: HashMap<TirRef, Vec<HashMap<TirRef, TirRef>>> = HashMap::new();
     let body = tir.body_stmts();
@@ -304,7 +362,7 @@ pub(crate) fn view_liveness_stmts(
     tir: &Tir,
     pool: &InternPool,
     stmts: &[TirRef],
-    bindings: &mut HashMap<StringId, TirRef>,
+    bindings: &mut Bindings,
     last_use: &mut HashMap<TirRef, TirRef>,
     arm_last_reads: &mut HashMap<TirRef, Vec<HashMap<TirRef, TirRef>>>,
 ) {
@@ -317,48 +375,46 @@ pub(crate) fn view_liveness_stmt(
     tir: &Tir,
     pool: &InternPool,
     r: TirRef,
-    bindings: &mut HashMap<StringId, TirRef>,
+    bindings: &mut Bindings,
     last_use: &mut HashMap<TirRef, TirRef>,
     arm_last_reads: &mut HashMap<TirRef, Vec<HashMap<TirRef, TirRef>>>,
 ) {
     match tir.inst(r).tag {
         TirTag::VarDecl => {
             let view = tir.var_decl_view(r);
-            record_view_reads(tir, pool, view.initializer, bindings, last_use);
+            record_view_reads(tir, pool, view.initializer, &bindings.map, last_use);
             if pool.is_view(tir.inst(r).ty)
-                && let Some(target) = view_binding_target(tir, bindings, view.initializer)
+                && let Some(target) = view_binding_target(tir, &bindings.map, view.initializer)
             {
                 bindings.insert(view.name, target);
             }
         }
         TirTag::Assign => {
             let view = tir.assign_view(r);
-            record_view_reads(tir, pool, view.value, bindings, last_use);
+            record_view_reads(tir, pool, view.value, &bindings.map, last_use);
             if pool.is_view(tir.inst(r).ty) {
-                match view_binding_target(tir, bindings, view.value) {
+                match view_binding_target(tir, &bindings.map, view.value) {
                     Some(target) => {
                         bindings.insert(view.name, target);
                     }
                     None => {
-                        bindings.remove(&view.name);
+                        bindings.remove(view.name);
                     }
                 }
             }
         }
         TirTag::IfStmt => {
             let view = tir.if_stmt_view(r);
-            record_view_reads(tir, pool, view.cond, bindings, last_use);
-            // Snapshot per arm; merge first-wins, mirroring the walk's
-            // `current_owner` discipline. Each arm body walks with a
-            // fresh read map so the per-arm table can distinguish
-            // arm-local reads; the records are then merged into
-            // `last_use` in walk order (overwriting insert), leaving
-            // the global map identical to a single shared walk.
-            let pre = bindings.clone();
-            let mut arm_maps = Vec::with_capacity(2 + view.elif_branches.len());
-            let mut arm_reads: Vec<HashMap<TirRef, TirRef>> = Vec::with_capacity(
-                1 + view.elif_branches.len() + usize::from(view.else_stmts.is_some()),
-            );
+            record_view_reads(tir, pool, view.cond, &bindings.map, last_use);
+            // Mark/rollback replaces the old per-arm `pre.clone()`
+            // snapshots: each arm's writes fold into a small write set,
+            // merged first-wins in arm order. Removals never propagate
+            // past the join, matching the old full-map merge (a name
+            // absent from an arm's map left `merged`'s entry alone).
+            let mark = bindings.mark();
+            let arm_count = 1 + view.elif_branches.len() + usize::from(view.else_stmts.is_some());
+            let mut arm_maps: Vec<HashMap<StringId, TirRef>> = Vec::with_capacity(arm_count);
+            let mut arm_reads: Vec<HashMap<TirRef, TirRef>> = Vec::with_capacity(arm_count);
             let mut then_reads = HashMap::new();
             view_liveness_stmts(
                 tir,
@@ -372,9 +428,9 @@ pub(crate) fn view_liveness_stmt(
                 last_use.insert(*k, *v);
             }
             arm_reads.push(then_reads);
-            arm_maps.push(std::mem::replace(bindings, pre.clone()));
+            arm_maps.push(bindings.rollback(mark));
             for elif in &view.elif_branches {
-                record_view_reads(tir, pool, elif.cond, bindings, last_use);
+                record_view_reads(tir, pool, elif.cond, &bindings.map, last_use);
                 let mut body_reads = HashMap::new();
                 view_liveness_stmts(
                     tir,
@@ -388,7 +444,7 @@ pub(crate) fn view_liveness_stmt(
                     last_use.insert(*k, *v);
                 }
                 arm_reads.push(body_reads);
-                arm_maps.push(std::mem::replace(bindings, pre.clone()));
+                arm_maps.push(bindings.rollback(mark));
             }
             if let Some(else_stmts) = &view.else_stmts {
                 let mut else_reads = HashMap::new();
@@ -404,29 +460,34 @@ pub(crate) fn view_liveness_stmt(
                     last_use.insert(*k, *v);
                 }
                 arm_reads.push(else_reads);
-                arm_maps.push(std::mem::replace(bindings, pre.clone()));
+                arm_maps.push(bindings.rollback(mark));
             }
             arm_last_reads.insert(r, arm_reads);
-            let mut merged = pre;
-            for arm in arm_maps {
-                for (k, v) in arm {
-                    merged.entry(k).or_insert(v);
+            // First-wins merge in arm order; `bindings` is already
+            // rolled back to the pre-if state.
+            for arm_writes in arm_maps {
+                for (k, v) in arm_writes {
+                    // Logged insert (not map.entry): an enclosing arm's
+                    // rollback must undo this merge and pick the name up
+                    // in its write set.
+                    if !bindings.map.contains_key(&k) {
+                        bindings.insert(k, v);
+                    }
                 }
             }
-            *bindings = merged;
         }
         TirTag::WhileLoop => {
             let view = tir.while_loop_view(r);
-            record_view_reads(tir, pool, view.cond, bindings, last_use);
+            record_view_reads(tir, pool, view.cond, &bindings.map, last_use);
             view_liveness_loop_body(tir, pool, &view.body, bindings, last_use, arm_last_reads);
         }
         TirTag::ForRange => {
             let view = tir.for_range_view(r);
-            record_view_reads(tir, pool, view.start, bindings, last_use);
-            record_view_reads(tir, pool, view.end, bindings, last_use);
+            record_view_reads(tir, pool, view.start, &bindings.map, last_use);
+            record_view_reads(tir, pool, view.end, &bindings.map, last_use);
             view_liveness_loop_body(tir, pool, &view.body, bindings, last_use, arm_last_reads);
         }
-        _ => record_view_reads(tir, pool, r, bindings, last_use),
+        _ => record_view_reads(tir, pool, r, &bindings.map, last_use),
     }
 }
 
@@ -436,15 +497,19 @@ pub(crate) fn view_liveness_loop_body(
     tir: &Tir,
     pool: &InternPool,
     body: &[TirRef],
-    bindings: &mut HashMap<StringId, TirRef>,
+    bindings: &mut Bindings,
     last_use: &mut HashMap<TirRef, TirRef>,
     arm_last_reads: &mut HashMap<TirRef, Vec<HashMap<TirRef, TirRef>>>,
 ) {
-    let pre = bindings.clone();
+    let mark = bindings.mark();
     view_liveness_stmts(tir, pool, body, bindings, last_use, arm_last_reads);
-    let after = std::mem::replace(bindings, pre);
-    for (k, v) in after {
-        bindings.entry(k).or_insert(v);
+    let writes = bindings.rollback(mark);
+    for (k, v) in writes {
+        // Logged insert (not map.entry): an enclosing arm's rollback must
+        // undo this merge and pick the name up in its write set.
+        if !bindings.map.contains_key(&k) {
+            bindings.insert(k, v);
+        }
     }
 }
 
@@ -576,5 +641,52 @@ pub(crate) fn refine_view_liveness_for_arm(
 pub(crate) fn restore_view_last_use(own: &mut Ownership, saved: Vec<(TirRef, TirRef)>) {
     for (vi, global_lu) in saved {
         Ownership::dense_set(&mut own.view_last_use, vi, global_lu);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nested mark/rollback invariant: an inner if's write set, merged
+    /// back with a guarded logged insert, must be picked up by the
+    /// enclosing arm's rollback (the merge's log entry is replayed and
+    /// undone), while a removal in the outer arm drops that name from
+    /// the outer write set.
+    #[test]
+    fn bindings_nested_rollback_picks_up_inner_merge_writes() {
+        let mut bindings = Bindings::default();
+        let (a, b, c) = (
+            StringId::from_raw(1),
+            StringId::from_raw(2),
+            StringId::from_raw(3),
+        );
+        let (va, vb, vc) = (
+            TirRef::from_raw(10),
+            TirRef::from_raw(11),
+            TirRef::from_raw(12),
+        );
+
+        bindings.insert(a, va);
+        let outer = bindings.mark();
+        bindings.insert(b, vb);
+        let inner = bindings.mark();
+        // An inner if's logged merge write.
+        if !bindings.map.contains_key(&c) {
+            bindings.insert(c, vc);
+        }
+        let inner_writes = bindings.rollback(inner);
+        assert_eq!(inner_writes, HashMap::from([(c, vc)]));
+        assert_eq!(bindings.map, HashMap::from([(a, va), (b, vb)]));
+        // Merge the inner write set the way the merge sites do.
+        for (k, v) in inner_writes {
+            if !bindings.map.contains_key(&k) {
+                bindings.insert(k, v);
+            }
+        }
+        bindings.remove(b);
+        let outer_writes = bindings.rollback(outer);
+        assert_eq!(outer_writes, HashMap::from([(c, vc)]));
+        assert_eq!(bindings.map, HashMap::from([(a, va)]));
     }
 }

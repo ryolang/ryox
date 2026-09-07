@@ -126,6 +126,13 @@ impl<M: Module> Codegen<M> {
                 }
                 _ => unreachable!("INeg must carry TirData::UnOp"),
             },
+            TirTag::FNeg => match inst.data {
+                TirData::UnOp(operand) => {
+                    let v = Self::eval_inst(builder, ctx, operand)?;
+                    builder.ins().fneg(v)
+                }
+                _ => unreachable!("FNeg must carry TirData::UnOp"),
+            },
             TirTag::BoolNot => match inst.data {
                 TirData::UnOp(operand) => {
                     let v = Self::eval_inst(builder, ctx, operand)?;

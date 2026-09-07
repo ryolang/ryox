@@ -161,12 +161,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Summary:** Every str stack slot hardcodes 24 bytes / align 3 / offsets 0,8,16 (consts at `codegen/mod.rs:40-45`), and `len`/`cap` are hardcoded `types::I64` (`codegen/expr.rs:1155-1170`) while `ptr` is pointer-sized. On a 32-bit target, caller and callee layouts silently mismatch.
 **Resolution:** Centralize the fat-pointer layout in one place (offsets and size computed from `module.target_config().pointer_type()`) and mirror it in the runtime. Prerequisite for any 32-bit target; interacts with I-021 (bool FFI width) when FFI lands.
 
-### I-079 — Unary minus on `float` is rejected
-
-**Files:** `ryo-frontend/src/sema/expr.rs` (`InstTag::Neg` arm :143-177)
-**Summary:** The `Neg` arm only handles `TypeKind::Int` (`INeg`); `-x` on a float operand emits `UnsupportedOperator` even though float arithmetic is otherwise fully supported. Asymmetric and undocumented; smells like an oversight rather than a decision.
-**Resolution:** Add `TirTag::FNeg` lowering to Cranelift `fneg` and accept `Float` in the `Neg` arm.
-
 ### I-080 — UIR/TIR `extra`-layout modules are duplicated with subtly different layouts
 
 **Files:** `ryo-core/src/uir.rs` (`var_decl_extra` etc.), `ryo-core/src/tir.rs` (`call_extra` :337-342, `var_decl_extra` :355-362, `assign_extra`/… :370-418)
@@ -279,12 +273,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Summary:** The `mode == Borrow && tag == ViewAsOwner → projection_root else underlying_owner` look-through is written out twice, near-verbatim, in two helpers that must agree for the P6'/E4 rules to stay coherent. A change to one side (e.g. a new look-through case) silently desynchronizes the diagnostic span search from the ownership partition.
 **Resolution:** Extract one `fn call_arg_owner(own, tir, pool, mode, arg) -> Owner` helper used by both sites.
 
-### I-136 — Ownership pass clones whole state maps on hot paths
-
-**Files:** `ryo-frontend/src/ownership/walk.rs` (:556-578 — `Ownership` clone per if/elif/else arm), `ryo-frontend/src/ownership/loops.rs` (:480-537 — map clones + `sidecar.clone()` per propagate pass)
-**Summary:** Every branch arm and every loop-propagate pass deep-clones the full ownership state (19 fields, several `HashMap`s). Correct, but against R3's allocation discipline on the hottest analysis path; the cost grows with function body size. (Codegen's per-block map clones are tracked separately as I-095.)
-**Resolution:** After I-129 converts the dense-index maps to `Vec` side tables, replace whole-state clones with snapshot/restore of the four non-monotone fields only, or a copy-on-write per-arm overlay. Measure on the benchmark suite before and after.
-
 ### I-164 — Guard-elision extensions deferred from the value-range work
 
 **Files:** `ryo-backend/src/codegen/expr.rs` (checked-op helpers, `emit_div_guard`), `ryo-backend/src/codegen/mod.rs` (if/while emission)
@@ -308,12 +296,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Files:** `ryo-frontend/src/ownership/loops.rs` (`schedule_break_continue_frees` :753, per-jump snapshot :546)
 **Summary:** Every break/continue jump clones the entire `own.states` map into a sorted `Vec`, then builds `on_path`/`covers_this_jump`/`free_inside_loop` sets and scans the whole `free_schedule` — all per jump, though the snapshot is constant within a loop body walk. The per-loop invariants are precomputed once per loop (`LoopExitCtx`); this per-jump residue remains.
 **Resolution:** Hoist the sorted snapshot to once per loop body walk (or iterate the map with an index); reuse scratch sets across jumps.
-
-### I-146 — `collect_view_liveness` clones the bindings map per if/arm/loop
-
-**Files:** `ryo-frontend/src/ownership/views.rs` (`collect_view_liveness` :254; `bindings` clones :344, :430)
-**Summary:** The view-liveness pre-walk clones the full `bindings` map per if statement (`pre = bindings.clone()`) and again per arm, plus per-arm fresh read maps, and clones per loop body. Same class as I-136's merge-path clones but a different pass, so I-136's resolution won't sweep it up unless extended.
-**Resolution:** Apply the same snapshot/undo-log or overlay approach chosen for I-136; fix both passes together.
 
 ### I-147 — `emit_builtin_call` allocates mode Vecs per builtin call
 

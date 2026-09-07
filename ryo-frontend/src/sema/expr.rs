@@ -166,6 +166,9 @@ pub(crate) fn analyze_expr_allow_never(
                         fcx.builder.unary(TirTag::INeg, sema.pool.int(), sub, span)
                     }
                 }
+                TypeKind::Float => fcx
+                    .builder
+                    .unary(TirTag::FNeg, sema.pool.float(), sub, span),
                 TypeKind::Error => fcx.builder.unreachable(sema.pool.error_type(), span),
                 _ => {
                     sema.sink.emit(Diag::error(

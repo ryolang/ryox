@@ -227,6 +227,9 @@ pub enum TirTag {
     /// Integer negation. Operand in `TirData::UnOp`.
     INeg,
 
+    /// Float negation. Operand in `TirData::UnOp`.
+    FNeg,
+
     /// Function call (user or builtin). Variable payload in `extra`
     /// — see [`call_extra`].
     Call,
@@ -626,7 +629,7 @@ impl TirBuilder {
     pub fn unary(&mut self, tag: TirTag, ty: TypeId, operand: TirRef, span: Span) -> TirRef {
         debug_assert!(matches!(
             tag,
-            TirTag::INeg | TirTag::BoolNot | TirTag::Return | TirTag::ExprStmt
+            TirTag::INeg | TirTag::FNeg | TirTag::BoolNot | TirTag::Return | TirTag::ExprStmt
         ));
         self.push(tag, ty, TirData::UnOp(operand), span)
     }
@@ -1732,6 +1735,7 @@ fn bin_op_name(t: TirTag) -> &'static str {
 fn un_op_name(t: TirTag) -> &'static str {
     match t {
         TirTag::INeg => "ineg",
+        TirTag::FNeg => "fneg",
         TirTag::BoolNot => "bool_not",
         TirTag::Return => "ret",
         TirTag::ExprStmt => "expr_stmt",
