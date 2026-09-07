@@ -297,12 +297,6 @@ Resolved entries are **removed** from this file. Language-visible decisions behi
 **Summary:** Every break/continue jump clones the entire `own.states` map into a sorted `Vec`, then builds `on_path`/`covers_this_jump`/`free_inside_loop` sets and scans the whole `free_schedule` — all per jump, though the snapshot is constant within a loop body walk. The per-loop invariants are precomputed once per loop (`LoopExitCtx`); this per-jump residue remains.
 **Resolution:** Hoist the sorted snapshot to once per loop body walk (or iterate the map with an index); reuse scratch sets across jumps.
 
-### I-146 — `collect_view_liveness` clones the bindings map per if/arm/loop
-
-**Files:** `ryo-frontend/src/ownership/views.rs` (`collect_view_liveness` :254; `bindings` clones :344, :430)
-**Summary:** The view-liveness pre-walk clones the full `bindings` map per if statement (`pre = bindings.clone()`) and again per arm, plus per-arm fresh read maps, and clones per loop body. Same class as I-136's merge-path clones but a different pass, so I-136's resolution won't sweep it up unless extended.
-**Resolution:** Apply the same snapshot/undo-log or overlay approach chosen for I-136; fix both passes together.
-
 ### I-147 — `emit_builtin_call` allocates mode Vecs per builtin call
 
 **Files:** `ryo-frontend/src/sema/builtins.rs` (:22)
