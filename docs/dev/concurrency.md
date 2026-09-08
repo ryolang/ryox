@@ -67,6 +67,15 @@ normative specification. Ryo remains colorless: no `async`/`await`, no
 | Dispatcher worker budget | `4 × RYOMAXPROCS` | Total `workers` across all custom dispatchers (§4.5). |
 | Timer wheel resolution | `1 ms` | Sufficient for scripting workloads. |
 
+**Gate: proof-of-concept spike before Phase 1.** No runtime code is written until a
+throwaway PoC validates the core stack end to end. The PoC is scratch work (not
+committed runtime code): `corosensei` stack switching plus `mio` polling on Linux,
+macOS, and Windows, driven by a minimal single-threaded round-robin scheduler over a
+hardcoded task set, with a rough task-switch cost measurement. When the PoC is ready
+and validates feasibility, Phase 1 implementation begins. If it surfaces blocking
+issues (stack growth behavior, IOCP integration, context-switch overhead), revisit
+the core-stack choices in this document first.
+
 > **Sibling reference docs:** [`memory_model_comparison.md`](pl_references/memory_model_comparison.md), [`rust.md`](pl_references/rust.md), [`mojo.md`](pl_references/mojo.md), [`arc_optimizer.md`](arc_optimizer.md), [`proposals/wasm_target.md`](proposals/wasm_target.md).
 
 ---
